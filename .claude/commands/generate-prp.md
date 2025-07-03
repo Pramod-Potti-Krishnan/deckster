@@ -34,6 +34,13 @@ Using PRPs/templates/prp_base.md as template:
 - **Gotchas**: Library quirks, version issues
 - **Patterns**: Existing approaches to follow
 
+### For each agent involved in the PRP, clearly document its
+- **Role**: Articulate the Key Result Areas and Service Level Agreements for the Agent.
+- **Prompt**: A starting point base prompt for the agent
+- **Tools**: The tools the agent needs to have access to for succeeding including which needs to be built vs leveraged from other MCP platforms.
+- **Input Format**: What's the base model template the agent would take input in and from which other agents.
+- **Output Format**: What's the base model template the agent would provide input in and to which other agents.
+
 ### Implementation Blueprint
 - Start with pseudocode showing approach
 - Reference real files for patterns
