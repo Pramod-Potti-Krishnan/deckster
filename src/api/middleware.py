@@ -45,6 +45,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.exclude_paths = exclude_paths or [
             "/health",
+            "/api/health/cors",
             "/docs",
             "/openapi.json",
             "/favicon.ico"
@@ -293,14 +294,19 @@ def setup_middleware(app):
     from ..config.settings import get_settings
     settings = get_settings()
     
+    # Log CORS configuration
+    from ..utils.logger import logger
+    logger.info(f"Setting up CORS middleware with origins: {settings.cors_origins}")
+    
     # CORS middleware (configure based on your frontend)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,  # Read from settings/environment
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
         allow_headers=["*"],
-        expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"]
+        expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
+        max_age=3600  # Cache preflight requests for 1 hour
     )
     
     # Add custom middleware in order (outer to inner)

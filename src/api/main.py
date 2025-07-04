@@ -33,6 +33,12 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Presentation Generator API", version=settings.app_version)
     
+    # Log CORS configuration
+    logger.info(f"APP_ENV: {settings.app_env}")
+    logger.info(f"CORS origins configured: {settings.cors_origins}")
+    logger.info(f"Development mode: {settings.is_development}")
+    logger.info(f"Dev token endpoint available: {settings.is_development}")
+    
     try:
         # Initialize Redis connection
         redis = await get_redis()
@@ -130,6 +136,19 @@ async def health_check():
     # Return appropriate status code
     status_code = 200 if health_status["status"] == "healthy" else 503
     return JSONResponse(content=health_status, status_code=status_code)
+
+
+# CORS test endpoint (no auth required)
+@app.get("/api/health/cors")
+async def cors_test():
+    """Test CORS configuration without authentication."""
+    return {
+        "status": "ok",
+        "cors_test": True,
+        "environment": settings.app_env,
+        "cors_origins": settings.cors_origins,
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
 
 # API Info endpoint
