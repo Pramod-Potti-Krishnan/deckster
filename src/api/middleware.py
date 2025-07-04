@@ -46,6 +46,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         self.exclude_paths = exclude_paths or [
             "/health",
             "/api/health/cors",
+            "/api/health/test-logging",
             "/docs",
             "/openapi.json",
             "/favicon.ico"
