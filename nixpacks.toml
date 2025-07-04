@@ -1,9 +1,12 @@
 [phases.setup]
 nixPkgs = ["python311", "gcc"]
+aptPkgs = ["python3-pip"]
 
 [phases.install]
+dependsOn = ["setup"]
 cmds = [
-    "python -m pip install -r requirements-prod.txt || python -m pip install -r requirements.txt"
+    "python -m ensurepip --upgrade || true",
+    "python -m pip install --no-cache-dir -r requirements-prod.txt || python -m pip install --no-cache-dir -r requirements.txt"
 ]
 
 [start]
