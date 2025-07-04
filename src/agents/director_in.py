@@ -184,7 +184,8 @@ Output structured JSON responses according to the defined schemas."""
             output_type = "structure"
             next_agents = ["ux_architect", "researcher"]
         
-        return DirectorInboundOutput(
+        # Create output with proper initialization
+        output = DirectorInboundOutput(
             agent_id=self.agent_id,
             output_type=output_type,
             timestamp=datetime.utcnow(),
@@ -195,6 +196,17 @@ Output structured JSON responses according to the defined schemas."""
             analysis=analysis,
             next_agents=next_agents
         )
+        
+        # If we need clarifications, generate them
+        if output_type == "clarification":
+            # Generate questions
+            questions = await self._run_clarification_generation(
+                analysis.missing_information,
+                context
+            )
+            output.clarification_questions = questions
+        
+        return output
     
     async def _run_requirement_analysis(
         self,

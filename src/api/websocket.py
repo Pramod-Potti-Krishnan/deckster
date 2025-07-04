@@ -262,6 +262,12 @@ class WebSocketHandler:
                 )
                 return
             
+            # Debug logging for message processing
+            api_logger.info(
+                f"Processing user input: text='{text[:50]}...', has_response_to={bool(message.data.get('response_to'))}",
+                session_id=self.session_id
+            )
+            
             # Check for test messages
             if text.lower().startswith("test:"):
                 await self._handle_test_message(text)
@@ -278,6 +284,13 @@ class WebSocketHandler:
     async def _start_presentation_generation(self, user_input: UserInput):
         """Start a new presentation generation workflow."""
         try:
+            # Debug logging for workflow start
+            api_logger.debug(
+                f"Starting presentation generation - workflow_runner={self.workflow_runner is not None}",
+                session_id=self.session_id,
+                user_input_text=user_input.data.get("text", "")[:100]
+            )
+            
             # Check if workflow runner is available
             if not self.workflow_runner:
                 await self._send_error(
@@ -293,6 +306,13 @@ class WebSocketHandler:
                 progress=self._create_progress_update("analysis", 10)
             )
             
+            # Debug logging before workflow start
+            api_logger.debug(
+                "Calling workflow_runner.start_generation",
+                session_id=self.session_id,
+                workflow_runner_type=type(self.workflow_runner).__name__
+            )
+            
             # Start workflow
             self.workflow_state = await self.workflow_runner.start_generation(
                 user_input=user_input,
@@ -300,10 +320,29 @@ class WebSocketHandler:
                 user_id=self.token_data.user_id
             )
             
+            # Debug logging after workflow returns
+            api_logger.debug(
+                f"Workflow returned state: phase={self.workflow_state.get('current_phase') if self.workflow_state else 'None'}",
+                session_id=self.session_id,
+                has_workflow_state=self.workflow_state is not None,
+                workflow_state_keys=list(self.workflow_state.keys()) if self.workflow_state else []
+            )
+            
             # Handle workflow result
             await self._handle_workflow_state()
         
         except Exception as e:
+            # Enhanced error logging
+            api_logger.error(
+                f"Workflow start failed: {type(e).__name__}: {str(e)}",
+                session_id=self.session_id,
+                error_type=type(e).__name__,
+                error_message=str(e),
+                has_workflow_runner=self.workflow_runner is not None,
+                workflow_runner_type=type(self.workflow_runner).__name__ if self.workflow_runner else "None",
+                exc_info=True  # Include full traceback
+            )
+            
             log_error(e, "workflow_start_failed", {
                 "session_id": self.session_id,
                 "error_type": type(e).__name__,
@@ -354,9 +393,14 @@ class WebSocketHandler:
     async def _handle_workflow_state(self):
         """Handle workflow state and send appropriate messages."""
         if not self.workflow_state:
+            api_logger.warning("No workflow state to handle")
             return
         
         phase = self.workflow_state.get("current_phase")
+        api_logger.info(
+            f"Handling workflow state: phase={phase}, has_clarifications={bool(self.workflow_state.get('clarification_rounds'))}",
+            session_id=self.session_id
+        )
         
         if phase == "clarification":
             # Send clarification questions

@@ -87,6 +87,13 @@ async def analyze_request(state: WorkflowState) -> Dict[str, Any]:
     set_request_id(state["request_id"])
     set_session_id(state["session_id"])
     
+    # Debug logging
+    logger.debug(
+        "analyze_request starting",
+        session_id=state["session_id"],
+        has_user_input=state.get("user_input") is not None
+    )
+    
     # Initialize Director agent
     director = DirectorInboundAgent()
     
@@ -99,11 +106,30 @@ async def analyze_request(state: WorkflowState) -> Dict[str, Any]:
         user_id=state["user_id"]
     )
     
+    # Debug before execute
+    logger.debug(
+        "Calling director.execute",
+        session_id=state["session_id"],
+        action="analyze_request",
+        user_input_type=type(state["user_input"]).__name__
+    )
+    
     # Execute analysis
     result = await director.execute(
         action="analyze_request",
         parameters={"user_input": state["user_input"].model_dump(mode='json')},
         context=context
+    )
+    
+    # Debug after execute
+    logger.debug(
+        "Director execute returned",
+        session_id=state["session_id"],
+        result_type=type(result).__name__,
+        output_type=result.output_type if result else None,
+        has_analysis=result.analysis is not None if result else False,
+        has_clarification_questions=result.clarification_questions is not None if result else False,
+        clarification_questions_type=type(result.clarification_questions).__name__ if result and result.clarification_questions is not None else "None"
     )
     
     # Update state based on result
@@ -373,15 +399,44 @@ class MockWorkflow:
     
     async def astream(self, state: WorkflowState, config=None):
         """Mock async stream that just runs analyze_request."""
-        logger.info("Running mock workflow (LangGraph not available)")
+        logger.info(
+            "Running mock workflow (LangGraph not available)",
+            session_id=state.get("session_id"),
+            request_id=state.get("request_id"),
+            current_phase=state.get("current_phase")
+        )
+        
+        # Debug logging for initial state
+        logger.debug(
+            "MockWorkflow initial state",
+            session_id=state.get("session_id"),
+            has_user_input=state.get("user_input") is not None,
+            state_keys=list(state.keys())
+        )
         
         # Just run the analyze step for Phase 1
         try:
+            logger.debug("MockWorkflow calling analyze_request")
             updates = await analyze_request(state)
+            
+            # Debug logging for updates
+            logger.debug(
+                "MockWorkflow analyze_request returned",
+                session_id=state.get("session_id"),
+                updates_keys=list(updates.keys()) if updates else [],
+                needs_clarification=updates.get("needs_clarification") if updates else None,
+                current_phase=updates.get("current_phase") if updates else None
+            )
+            
             state.update(updates)
             yield state
         except Exception as e:
-            logger.error(f"Mock workflow error: {e}")
+            logger.error(
+                f"Mock workflow error: {type(e).__name__}: {str(e)}",
+                session_id=state.get("session_id"),
+                error_type=type(e).__name__,
+                exc_info=True
+            )
             state.update({
                 "current_phase": "error",
                 "agent_errors": {"workflow": str(e)},

@@ -456,19 +456,27 @@ class BaseAgent(ABC):
             "confidence_score": output.confidence_score
         }
         
-        # Add type-specific summaries
-        if hasattr(output, "clarification_questions"):
-            summary["question_count"] = len(output.clarification_questions)
-        elif hasattr(output, "layouts"):
-            summary["layout_count"] = len(output.layouts)
-        elif hasattr(output, "findings"):
-            summary["finding_count"] = len(output.findings)
-        elif hasattr(output, "assets"):
-            summary["asset_count"] = len(output.assets)
-        elif hasattr(output, "charts"):
-            summary["chart_count"] = len(output.charts)
-        elif hasattr(output, "diagrams"):
-            summary["diagram_count"] = len(output.diagrams)
+        # Add type-specific summaries with None checks
+        try:
+            if hasattr(output, "clarification_questions") and output.clarification_questions is not None:
+                summary["question_count"] = len(output.clarification_questions)
+            if hasattr(output, "layouts") and output.layouts is not None:
+                summary["layout_count"] = len(output.layouts)
+            if hasattr(output, "findings") and output.findings is not None:
+                summary["finding_count"] = len(output.findings)
+            if hasattr(output, "assets") and output.assets is not None:
+                summary["asset_count"] = len(output.assets)
+            if hasattr(output, "charts") and output.charts is not None:
+                summary["chart_count"] = len(output.charts)
+            if hasattr(output, "diagrams") and output.diagrams is not None:
+                summary["diagram_count"] = len(output.diagrams)
+        except Exception as e:
+            # Log the error but don't fail - summaries are for logging only
+            agent_logger.warning(
+                f"Error creating output summary for {self.agent_id}: {e}",
+                output_type=output.output_type,
+                error=str(e)
+            )
         
         return summary
     
