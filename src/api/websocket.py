@@ -56,7 +56,7 @@ class ConnectionManager:
         if websocket_id in self.active_connections:
             websocket = self.active_connections[websocket_id]
             if websocket.client_state == WebSocketState.CONNECTED:
-                await websocket.send_json(message.model_dump())
+                await websocket.send_json(message.model_dump(mode='json'))
     
     async def broadcast_to_session(self, session_id: str, message: BaseMessage):
         """Broadcast a message to all connections in a session."""
@@ -383,7 +383,7 @@ class WebSocketHandler:
                 "version": "1.0.0"
             }
         )
-        await self.websocket.send_json(message.model_dump())
+        await self.websocket.send_json(message.model_dump(mode='json'))
     
     async def _send_chat_message(
         self,
@@ -406,7 +406,7 @@ class WebSocketHandler:
             chat_data=chat_data
         )
         
-        await self.websocket.send_json(message.model_dump())
+        await self.websocket.send_json(message.model_dump(mode='json'))
     
     async def _send_clarification_questions(self, clarification_round):
         """Send clarification questions to client."""
@@ -491,7 +491,7 @@ class WebSocketHandler:
             )
         )
         
-        await self.websocket.send_json(message.model_dump())
+        await self.websocket.send_json(message.model_dump(mode='json'))
     
     async def _send_error(self, message: str, code: Optional[str] = None):
         """Send error message to client."""
@@ -501,7 +501,7 @@ class WebSocketHandler:
             code=code or "ERROR",
             message=message
         )
-        await self.websocket.send_json(error_message.model_dump())
+        await self.websocket.send_json(error_message.model_dump(mode='json'))
     
     async def _save_draft(self):
         """Save current presentation as draft."""

@@ -82,27 +82,30 @@ deckster/
 - ✅ Basic message handling and session management
 - ✅ Railway deployment configured and live
 - ✅ CORS configuration with multiple origin support
-- 🔧 Currently in deployment Round 10 - debugging frontend integration
+- ✅ Successfully completed Round 11.1 urgent fixes (July 4, 2025)
+- 🔧 Backend stable, frontend completing WebSocket state management fixes
 
 ### Deployment Progress
 - **Rounds 1-9**: Progressive fixes for CORS, environment variables, and JSON parsing
-- **Round 10**: Frontend WebSocket authentication integration issues
+- **Round 10**: Frontend WebSocket authentication integration issues ✅ RESOLVED
+- **Round 11**: LangGraph StateGraph initialization errors ✅ RESOLVED  
+- **Round 11.1**: Supabase RLS policy violations and session creation ✅ RESOLVED
 
-### Current Issues Being Fixed
-1. **Frontend Authentication Flow**
-   - Error: "No authentication token available"
-   - Frontend needs to implement proper token acquisition before WebSocket connection
-   - See `/docs/frontend-comms/frontend-integration-guide.md` for complete guide
+### Remaining Frontend Work
+1. **Frontend WebSocket State Management**
+   - Frontend needs to fix infinite "WebSocket client not initialized" loop
+   - Implement proper connection state management as detailed in Round 11 docs
+   - Backend is fully operational and ready for frontend connections
 
-2. **Railway Environment Issues**
-   - CORS origins getting semicolons appended (fixed with cleanup parser)
-   - Logfire package not loading despite being in requirements.txt
-   - Environment variable format differences between local and Railway
+### Important Environment Notes
+- **CORS_ORIGINS** is intentionally NOT an environment variable (removed in Round 9)
+- All CORS origins are hardcoded in application for reliability
+- "NOT SET" messages in logs are expected behavior
 
-3. **Known Limitations**
-   - Python 3.13 compatibility (using 3.11.9 for stability)
-   - Windows installation complexity
-   - `/api/dev/token` endpoint only available in development mode
+### Known Limitations
+- Python 3.13 compatibility (using 3.11.9 for stability)
+- Windows installation complexity
+- Production uses `/api/auth/demo` endpoint (available in all environments)
 
 ## Development Guidelines
 
