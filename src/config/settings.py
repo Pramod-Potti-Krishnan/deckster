@@ -131,7 +131,9 @@ class Settings(BaseSettings):
                 except:
                     pass
             # Fall back to comma-separated
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
+            # Clean up any semicolons that Railway might add
+            cleaned = v.replace(';', '')
+            return [origin.strip() for origin in cleaned.split(",") if origin.strip()]
         return v
     
     @field_validator("allowed_file_extensions", mode="before")
