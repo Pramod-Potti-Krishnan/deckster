@@ -161,6 +161,58 @@ async def cors_test():
     }
 
 
+# Logging test endpoint (no auth required)
+@app.get("/api/health/test-logging")
+async def test_logging():
+    """Test logging to debug Railway semicolon issue."""
+    import json
+    
+    # Test different logging scenarios
+    test_list = ['http://localhost:3000', 'http://localhost:5173']
+    
+    logger.info("=== RAILWAY LOGGING TEST (from endpoint) ===")
+    
+    # Test 1: Direct list logging
+    logger.info(f"Test 1 - Direct list: {test_list}")
+    
+    # Test 2: List with special characters
+    special_list = ['value1;', 'value2;', 'value3;']
+    logger.info(f"Test 2 - List with semicolons: {special_list}")
+    
+    # Test 3: String that looks like a list
+    fake_list = "['http://localhost:3000', 'http://localhost:5173']"
+    logger.info(f"Test 3 - String that looks like list: {fake_list}")
+    
+    # Test 4: Custom formatted list
+    formatted = "[" + ", ".join(f"'{item}'" for item in test_list) + "]"
+    logger.info(f"Test 4 - Custom formatted: {formatted}")
+    
+    # Test 5: JSON format
+    json_list = json.dumps(test_list)
+    logger.info(f"Test 5 - JSON format: {json_list}")
+    
+    # Test 6: Individual items
+    logger.info("Test 6 - Individual items:")
+    for i, item in enumerate(test_list):
+        logger.info(f"  Item {i}: {item}")
+    
+    # Test 7: repr() and str()
+    logger.info(f"Test 7 - repr(): {repr(test_list)}")
+    logger.info(f"Test 8 - str(): {str(test_list)}")
+    
+    # Test 9: Check current CORS settings
+    logger.info(f"Test 9 - Current CORS from settings: {settings.cors_origins}")
+    
+    logger.info("=== END RAILWAY LOGGING TEST ===")
+    
+    return {
+        "message": "Check Railway logs for test output",
+        "test_list": test_list,
+        "cors_origins": settings.cors_origins,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
 # API Info endpoint
 @app.get("/api/info", dependencies=[Depends(get_current_user)])
 async def api_info(current_user: TokenData = Depends(get_current_user)):
@@ -295,56 +347,6 @@ if settings.is_development:
         redis = await get_redis()
         # Implementation would clear specific namespaces
         return {"message": "Cache cleared"}
-    
-    @app.get("/api/dev/test-logging")
-    async def test_logging():
-        """Test logging to debug Railway semicolon issue."""
-        import json
-        
-        # Test different logging scenarios
-        test_list = ['http://localhost:3000', 'http://localhost:5173']
-        
-        logger.info("=== RAILWAY LOGGING TEST (from endpoint) ===")
-        
-        # Test 1: Direct list logging
-        logger.info(f"Test 1 - Direct list: {test_list}")
-        
-        # Test 2: List with special characters
-        special_list = ['value1;', 'value2;', 'value3;']
-        logger.info(f"Test 2 - List with semicolons: {special_list}")
-        
-        # Test 3: String that looks like a list
-        fake_list = "['http://localhost:3000', 'http://localhost:5173']"
-        logger.info(f"Test 3 - String that looks like list: {fake_list}")
-        
-        # Test 4: Custom formatted list
-        formatted = "[" + ", ".join(f"'{item}'" for item in test_list) + "]"
-        logger.info(f"Test 4 - Custom formatted: {formatted}")
-        
-        # Test 5: JSON format
-        json_list = json.dumps(test_list)
-        logger.info(f"Test 5 - JSON format: {json_list}")
-        
-        # Test 6: Individual items
-        logger.info("Test 6 - Individual items:")
-        for i, item in enumerate(test_list):
-            logger.info(f"  Item {i}: {item}")
-        
-        # Test 7: repr() and str()
-        logger.info(f"Test 7 - repr(): {repr(test_list)}")
-        logger.info(f"Test 8 - str(): {str(test_list)}")
-        
-        # Test 9: Check current CORS settings
-        logger.info(f"Test 9 - Current CORS from settings: {settings.cors_origins}")
-        
-        logger.info("=== END RAILWAY LOGGING TEST ===")
-        
-        return {
-            "message": "Check Railway logs for test output",
-            "test_list": test_list,
-            "cors_origins": settings.cors_origins,
-            "timestamp": datetime.utcnow().isoformat()
-        }
 
 
 # Background tasks
