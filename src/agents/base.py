@@ -208,7 +208,8 @@ class BaseAgent(ABC):
             to_agent=self.agent_id,
             action=action,
             parameters=parameters,
-            context=context.model_dump()
+            context=context.model_dump(),
+            payload=parameters  # AgentMessage requires payload field
         )
         
         # Log request
