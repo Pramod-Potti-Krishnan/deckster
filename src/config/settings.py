@@ -4,7 +4,7 @@ Uses pydantic-settings for environment variable management.
 """
 
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
 
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # API Configuration
     api_prefix: str = "/api/v1"
     websocket_path: str = "/ws"
-    cors_origins: List[str] = Field(
+    cors_origins: Union[str, List[str]] = Field(
         default=["http://localhost:3000", "http://localhost:5173"],
         env="CORS_ORIGINS"
     )
@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     
     # File Upload
     max_file_size_mb: int = Field(default=10, env="MAX_FILE_SIZE_MB")
-    allowed_file_extensions: List[str] = Field(
+    allowed_file_extensions: Union[str, List[str]] = Field(
         default=[".pdf", ".pptx", ".docx", ".xlsx", ".png", ".jpg", ".jpeg"],
         env="ALLOWED_FILE_EXTENSIONS"
     )
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     
     # Model Configuration
     primary_llm_model: str = Field(default="openai:gpt-4", env="PRIMARY_LLM_MODEL")
-    fallback_llm_models: List[str] = Field(
+    fallback_llm_models: Union[str, List[str]] = Field(
         default=["openai:gpt-3.5-turbo", "anthropic:claude-3-sonnet"],
         env="FALLBACK_LLM_MODELS"
     )
@@ -163,6 +163,14 @@ class Settings(BaseSettings):
                     pass
             return [model.strip() for model in v.split(",") if model.strip()]
         return v
+    
+    @field_validator("cors_origins", "allowed_file_extensions", "fallback_llm_models", mode="after")
+    def ensure_list_fields(cls, v):
+        """Ensure these fields are always lists after processing."""
+        if isinstance(v, str):
+            # This should not happen if before validators work correctly
+            return [v]
+        return v if isinstance(v, list) else []
     
     @property
     def is_production(self) -> bool:
