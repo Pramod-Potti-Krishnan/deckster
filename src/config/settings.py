@@ -120,6 +120,11 @@ class Settings(BaseSettings):
     def parse_cors_origins(cls, v):
         """Parse CORS origins from string or list."""
         if isinstance(v, str):
+            # Debug logging
+            print(f"[DEBUG] parse_cors_origins received string value: '{v}'")
+            print(f"[DEBUG] String length: {len(v)}")
+            print(f"[DEBUG] Contains semicolons: {';' in v}")
+            
             # Handle empty string
             if not v:
                 return []
@@ -133,7 +138,10 @@ class Settings(BaseSettings):
             # Fall back to comma-separated
             # Clean up any semicolons that Railway might add
             cleaned = v.replace(';', '')
-            return [origin.strip() for origin in cleaned.split(",") if origin.strip()]
+            print(f"[DEBUG] After cleaning semicolons: '{cleaned}'")
+            result = [origin.strip() for origin in cleaned.split(",") if origin.strip()]
+            print(f"[DEBUG] Final parsed result: {result}")
+            return result
         return v
     
     @field_validator("allowed_file_extensions", mode="before")

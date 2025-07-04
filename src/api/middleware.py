@@ -53,6 +53,10 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request with authentication."""
+        # Skip authentication for OPTIONS requests (CORS preflight)
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        
         # Skip authentication for excluded paths
         if any(request.url.path.startswith(path) for path in self.exclude_paths):
             return await call_next(request)
@@ -297,8 +301,10 @@ def setup_middleware(app):
     # Log CORS configuration
     from ..utils.logger import logger
     logger.info(f"Setting up CORS middleware with origins: {settings.cors_origins}")
+    logger.info("[DEBUG] Middleware setup order (outer to inner):")
     
     # CORS middleware (configure based on your frontend)
+    logger.info("[DEBUG] 1. Adding CORSMiddleware (handles OPTIONS preflight)")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,  # Read from settings/environment
@@ -310,10 +316,15 @@ def setup_middleware(app):
     )
     
     # Add custom middleware in order (outer to inner)
+    logger.info("[DEBUG] 2. Adding ErrorHandlingMiddleware")
     app.add_middleware(ErrorHandlingMiddleware)
+    logger.info("[DEBUG] 3. Adding SecurityHeadersMiddleware")
     app.add_middleware(SecurityHeadersMiddleware)
+    logger.info("[DEBUG] 4. Adding LoggingMiddleware")
     app.add_middleware(LoggingMiddleware)
+    logger.info("[DEBUG] 5. Adding RateLimitMiddleware")
     app.add_middleware(RateLimitMiddleware, requests_per_minute=10)
+    logger.info("[DEBUG] 6. Adding AuthenticationMiddleware (now skips OPTIONS)")
     app.add_middleware(AuthenticationMiddleware)
     
     # Add exception handler for rate limits

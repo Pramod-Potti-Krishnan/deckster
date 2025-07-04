@@ -33,6 +33,16 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Presentation Generator API", version=settings.app_version)
     
+    # Debug logging to check if Railway adds semicolons to all environment variables
+    import os
+    logger.info("[DEBUG] Checking raw environment variables:")
+    logger.info(f"[DEBUG] CORS_ORIGINS raw: '{os.environ.get('CORS_ORIGINS', 'NOT SET')}'")
+    logger.info(f"[DEBUG] APP_ENV raw: '{os.environ.get('APP_ENV', 'NOT SET')}'")
+    logger.info(f"[DEBUG] LOG_LEVEL raw: '{os.environ.get('LOG_LEVEL', 'NOT SET')}'")
+    logger.info(f"[DEBUG] JWT_ALGORITHM raw: '{os.environ.get('JWT_ALGORITHM', 'NOT SET')}'")
+    logger.info(f"[DEBUG] ALLOWED_FILE_EXTENSIONS raw: '{os.environ.get('ALLOWED_FILE_EXTENSIONS', 'NOT SET')}'")
+    logger.info(f"[DEBUG] FALLBACK_LLM_MODELS raw: '{os.environ.get('FALLBACK_LLM_MODELS', 'NOT SET')}'")
+    
     # Log CORS configuration
     logger.info(f"APP_ENV: {settings.app_env}")
     logger.info(f"CORS origins configured: {settings.cors_origins}")
