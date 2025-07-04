@@ -14,6 +14,10 @@ from functools import wraps
 import asyncio
 import time
 
+# Load environment variables from .env file BEFORE using them
+from dotenv import load_dotenv
+load_dotenv()
+
 # Optional import - logfire for observability
 try:
     import logfire
@@ -61,8 +65,48 @@ if LOGFIRE_AVAILABLE:
 else:
     # Create a mock logfire object for compatibility
     class MockLogfire:
-        def __getattr__(self, name):
-            return logging.getLogger("presentation-generator")
+        """Mock logfire that converts logfire-style calls to standard logging."""
+        def __init__(self):
+            self._logger = logging.getLogger("presentation-generator")
+        
+        def _format_message(self, message, kwargs):
+            """Format message with kwargs."""
+            if kwargs:
+                extra = " - " + ", ".join(f"{k}={v}" for k, v in kwargs.items())
+                return f"{message}{extra}"
+            return message
+        
+        def info(self, message, **kwargs):
+            """Handle logfire-style info calls."""
+            self._logger.info(self._format_message(message, kwargs))
+        
+        def debug(self, message, **kwargs):
+            """Handle logfire-style debug calls."""
+            self._logger.debug(self._format_message(message, kwargs))
+        
+        def warning(self, message, **kwargs):
+            """Handle logfire-style warning calls."""
+            self._logger.warning(self._format_message(message, kwargs))
+        
+        def error(self, message, **kwargs):
+            """Handle logfire-style error calls."""
+            self._logger.error(self._format_message(message, kwargs))
+        
+        def exception(self, message, **kwargs):
+            """Handle logfire-style exception calls."""
+            self._logger.exception(self._format_message(message, kwargs))
+        
+        def critical(self, message, **kwargs):
+            """Handle logfire-style critical calls."""
+            self._logger.critical(self._format_message(message, kwargs))
+        
+        def __repr__(self):
+            """String representation."""
+            return f"<MockLogfire wrapping {self._logger.name}>"
+        
+        def __str__(self):
+            """String conversion."""
+            return self.__repr__()
     
     logfire = MockLogfire()
 
