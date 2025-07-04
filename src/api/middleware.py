@@ -304,16 +304,30 @@ def setup_middleware(app):
     logger.info(f"Setting up CORS middleware with origins: {settings.cors_origins}")
     logger.info("[DEBUG] Middleware setup order (outer to inner):")
     
+    # Build allowed origins list
+    allowed_origins = settings.cors_origins.copy()
+    
+    # Add callback for dynamic origin validation (Vercel previews)
+    def is_allowed_origin(origin: str) -> bool:
+        # Check exact matches
+        if origin in allowed_origins:
+            return True
+        # Check Vercel preview URLs
+        if settings.cors_allow_vercel_previews and origin.endswith('.vercel.app'):
+            return True
+        return False
+    
     # CORS middleware (configure based on your frontend)
     logger.info("[DEBUG] 1. Adding CORSMiddleware (handles OPTIONS preflight)")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,  # Read from settings/environment
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
         allow_headers=["*"],
         expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
-        max_age=3600  # Cache preflight requests for 1 hour
+        max_age=3600,  # Cache preflight requests for 1 hour
+        allow_origin_regex=r"https://.*\.vercel\.app" if settings.cors_allow_vercel_previews else None
     )
     
     # Add custom middleware in order (outer to inner)

@@ -21,10 +21,15 @@ class Settings(BaseSettings):
     # API Configuration
     api_prefix: str = "/api/v1"
     websocket_path: str = "/ws"
-    cors_origins: Union[str, List[str]] = Field(
-        default=["http://localhost:3000", "http://localhost:5173"],
-        env="CORS_ORIGINS"
+    cors_origins: List[str] = Field(
+        default=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://www.deckster.xyz",
+            "https://deckster.xyz"
+        ]
     )
+    cors_allow_vercel_previews: bool = Field(default=True)
     
     # Server
     host: str = Field(default="0.0.0.0", env="HOST")
@@ -116,33 +121,6 @@ class Settings(BaseSettings):
             raise ValueError(f"app_env must be one of {allowed}")
         return v
     
-    @field_validator("cors_origins", mode="before")
-    def parse_cors_origins(cls, v):
-        """Parse CORS origins from string or list."""
-        if isinstance(v, str):
-            # Debug logging
-            print(f"[DEBUG] parse_cors_origins received string value: '{v}'")
-            print(f"[DEBUG] String length: {len(v)}")
-            print(f"[DEBUG] Contains semicolons: {';' in v}")
-            
-            # Handle empty string
-            if not v:
-                return []
-            # Try to parse as JSON first
-            if v.startswith('['):
-                try:
-                    import json
-                    return json.loads(v)
-                except:
-                    pass
-            # Fall back to comma-separated
-            # Clean up any semicolons that Railway might add
-            cleaned = v.replace(';', '')
-            print(f"[DEBUG] After cleaning semicolons: '{cleaned}'")
-            result = [origin.strip() for origin in cleaned.split(",") if origin.strip()]
-            print(f"[DEBUG] Final parsed result: {result}")
-            return result
-        return v
     
     @field_validator("allowed_file_extensions", mode="before")
     def parse_file_extensions(cls, v):
@@ -174,7 +152,7 @@ class Settings(BaseSettings):
             return [model.strip() for model in v.split(",") if model.strip()]
         return v
     
-    @field_validator("cors_origins", "allowed_file_extensions", "fallback_llm_models", mode="after")
+    @field_validator("allowed_file_extensions", "fallback_llm_models", mode="after")
     def ensure_list_fields(cls, v):
         """Ensure these fields are always lists after processing."""
         if isinstance(v, str):
