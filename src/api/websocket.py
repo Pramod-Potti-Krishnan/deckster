@@ -438,6 +438,45 @@ class WebSocketHandler:
                     {"action_id": "no", "type": "custom", "label": "No"}
                 ]
             )
+            
+            # 4. Test slide data structure
+            await asyncio.sleep(1)
+            test_slide_data = SlideData(
+                type="complete",
+                slides=[
+                    {
+                        "slide_id": "slide_1",
+                        "slide_number": 1,
+                        "title": "Test Slide",
+                        "subtitle": "Testing slide data extraction",
+                        "body_content": [{"type": "text", "content": "This tests if frontend correctly extracts slides array"}],
+                        "layout_type": "content",
+                        "speaker_notes": "Verify state.slides is an array, not an object"
+                    }
+                ],
+                presentation_metadata={
+                    "title": "Test Presentation",
+                    "total_slides": 1
+                }
+            )
+            
+            message = DirectorMessage(
+                session_id=self.session_id,
+                source="director_outbound",
+                slide_data=test_slide_data,
+                chat_data=ChatData(
+                    type="info",
+                    content="Test: Slide data sent. Check if state.slides is an array!"
+                )
+            )
+            
+            message_dict = message.model_dump(mode='json')
+            api_logger.debug(
+                f"Sending test DirectorMessage with slide_data: {json.dumps(message_dict, indent=2)}",
+                session_id=self.session_id
+            )
+            
+            await self.websocket.send_json(message_dict)
         
         else:
             await self._send_chat_message(
