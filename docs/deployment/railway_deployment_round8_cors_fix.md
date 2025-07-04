@@ -145,7 +145,33 @@ fetch('https://deckster-production.up.railway.app/api/dev/token', {
 - `/.env` - Local CORS origins
 - `/docs/deployment/railway-cors-setup.md` - Setup guide
 
+## Additional Issue: JSON Parsing Error
+
+After changing CORS_ORIGINS to comma-separated format, the app crashed with:
+```
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+```
+
+### Root Cause
+The settings validators were not robust enough to handle:
+1. Empty environment variables
+2. Both JSON array and comma-separated formats
+3. Missing optional environment variables
+
+### Solution
+Updated all array-type field validators to:
+1. Handle empty strings gracefully
+2. Try JSON parsing first (for backwards compatibility)
+3. Fall back to comma-separated parsing
+4. Return sensible defaults if parsing fails
+
+### Updated Validators
+- `parse_cors_origins` - Now handles both `["origin1","origin2"]` and `origin1,origin2`
+- `parse_file_extensions` - Added to handle file extensions with defaults
+- `parse_fallback_models` - Updated to handle empty values
+
 ## Next Steps
 1. Monitor Railway logs for CORS configuration on startup
 2. Implement proper authentication flow with Google OAuth
 3. Consider implementing a more robust CORS handling for error responses
+4. Add validation tests for environment variable parsing

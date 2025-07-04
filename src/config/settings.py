@@ -120,14 +120,48 @@ class Settings(BaseSettings):
     def parse_cors_origins(cls, v):
         """Parse CORS origins from string or list."""
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
+            # Handle empty string
+            if not v:
+                return []
+            # Try to parse as JSON first
+            if v.startswith('['):
+                try:
+                    import json
+                    return json.loads(v)
+                except:
+                    pass
+            # Fall back to comma-separated
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+    
+    @field_validator("allowed_file_extensions", mode="before")
+    def parse_file_extensions(cls, v):
+        """Parse file extensions from string or list."""
+        if isinstance(v, str):
+            if not v:
+                return [".pdf", ".pptx", ".docx", ".xlsx", ".png", ".jpg", ".jpeg"]
+            if v.startswith('['):
+                try:
+                    import json
+                    return json.loads(v)
+                except:
+                    return [".pdf", ".pptx", ".docx", ".xlsx", ".png", ".jpg", ".jpeg"]
+            return [ext.strip() for ext in v.split(",") if ext.strip()]
         return v
     
     @field_validator("fallback_llm_models", mode="before")
     def parse_fallback_models(cls, v):
         """Parse fallback models from string or list."""
         if isinstance(v, str):
-            return [model.strip() for model in v.split(",")]
+            if not v:
+                return ["openai:gpt-3.5-turbo", "anthropic:claude-3-sonnet"]
+            if v.startswith('['):
+                try:
+                    import json
+                    return json.loads(v)
+                except:
+                    pass
+            return [model.strip() for model in v.split(",") if model.strip()]
         return v
     
     @property
