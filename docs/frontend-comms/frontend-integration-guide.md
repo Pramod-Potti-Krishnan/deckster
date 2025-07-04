@@ -1,39 +1,383 @@
 # Frontend WebSocket Integration Guide
 
-This guide provides comprehensive instructions for integrating your frontend application with the Deckster.xyz WebSocket API. It covers connection setup, authentication, message handling, UI updates, and error management.
+This guide provides comprehensive instructions for integrating your frontend application with the Deckster.xyz WebSocket API. It covers authentication setup, connection establishment, message handling, UI updates, and error management.
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [WebSocket Connection Setup](#websocket-connection-setup)
-3. [Authentication Methods](#authentication-methods)
-4. [Message Formats and Types](#message-formats-and-types)
-5. [Handling Different Response Types](#handling-different-response-types)
-6. [UI Update Patterns](#ui-update-patterns)
-7. [Error Handling](#error-handling)
-8. [Code Examples](#code-examples)
-9. [Best Practices](#best-practices)
+2. [Authentication Setup](#authentication-setup)
+3. [Environment Configuration](#environment-configuration)
+4. [WebSocket Connection Setup](#websocket-connection-setup)
+5. [Authentication Methods](#authentication-methods)
+6. [Message Formats and Types](#message-formats-and-types)
+7. [Handling Different Response Types](#handling-different-response-types)
+8. [UI Update Patterns](#ui-update-patterns)
+9. [Error Handling](#error-handling)
+10. [Code Examples](#code-examples)
+11. [Best Practices](#best-practices)
+12. [Troubleshooting](#troubleshooting)
 
 ## Overview
 
 The Deckster.xyz WebSocket API enables real-time bidirectional communication between the frontend and the Director agents. The system uses JSON messages for all communications, with HTML-embedded visual content for slide previews.
 
 ### Key Features
-- JWT-based authentication
+- JWT-based authentication (required for all connections)
 - Real-time message streaming
 - Automatic reconnection with session recovery
 - Progress tracking and status updates
 - Concurrent slide and chat data handling
 
+## Authentication Setup
+
+**IMPORTANT**: The WebSocket API requires JWT authentication. Without a valid JWT token, connections will be rejected with a 1008 policy violation error.
+
+### Quick Start Authentication
+
+```javascript
+// Step 1: Get a JWT token (development)
+async function getDevToken() {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_HTTP_URL}/api/dev/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: 'test_user' })
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to get authentication token');
+  }
+  
+  const { access_token } = await response.json();
+  return access_token;
+}
+
+// Step 2: Connect with authentication
+async function connectToWebSocket() {
+  const token = await getDevToken();
+  const ws = new WebSocket(`${process.env.NEXT_PUBLIC_API_URL}/ws?token=${token}`);
+  
+  ws.onopen = () => {
+    console.log('Connected successfully!');
+  };
+  
+  ws.onerror = (error) => {
+    console.error('Connection failed:', error);
+  };
+  
+  return ws;
+}
+```
+
+### Production Authentication
+
+For production environments, implement proper authentication flow:
+
+```javascript
+// Production token acquisition
+async function getProductionToken(email, password) {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_HTTP_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  
+  if (!response.ok) {
+    throw new Error('Authentication failed');
+  }
+  
+  const { access_token, refresh_token, expires_in } = await response.json();
+  
+  // Store tokens securely
+  localStorage.setItem('access_token', access_token);
+  localStorage.setItem('refresh_token', refresh_token);
+  localStorage.setItem('token_expiry', Date.now() + (expires_in * 1000));
+  
+  return access_token;
+}
+```
+
+## Complete Quick Start Example
+
+Here's a complete working example that handles authentication, connection, and basic messaging:
+
+```javascript
+// quickstart.js - Complete working example
+class DecksterQuickStart {
+  constructor() {
+    this.wsUrl = 'wss://deckster-production.up.railway.app';
+    this.httpUrl = 'https://deckster-production.up.railway.app';
+    this.ws = null;
+    this.token = null;
+    this.sessionId = null;
+  }
+
+  // Step 1: Get authentication token
+  async getToken() {
+    try {
+      const response = await fetch(`${this.httpUrl}/api/dev/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 'test_user' })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Token request failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      this.token = data.access_token;
+      console.log('✅ Got authentication token');
+      return this.token;
+    } catch (error) {
+      console.error('❌ Failed to get token:', error);
+      throw error;
+    }
+  }
+
+  // Step 2: Connect to WebSocket
+  async connect() {
+    if (!this.token) {
+      await this.getToken();
+    }
+
+    return new Promise((resolve, reject) => {
+      // Connect with token in query parameter
+      this.ws = new WebSocket(`${this.wsUrl}/ws?token=${this.token}`);
+      
+      this.ws.onopen = () => {
+        console.log('✅ WebSocket connected');
+        resolve();
+      };
+      
+      this.ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        console.log('📨 Received:', message);
+        
+        // Handle connection message
+        if (message.type === 'connection' && message.status === 'connected') {
+          this.sessionId = message.session_id;
+          console.log('✅ Session established:', this.sessionId);
+        }
+        
+        // Handle director messages
+        if (message.type === 'director_message') {
+          this.handleDirectorMessage(message);
+        }
+      };
+      
+      this.ws.onerror = (error) => {
+        console.error('❌ WebSocket error:', error);
+        reject(error);
+      };
+      
+      this.ws.onclose = (event) => {
+        console.log('🔌 Disconnected:', event.code, event.reason);
+      };
+    });
+  }
+
+  // Step 3: Send a message
+  sendMessage(text) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error('❌ WebSocket not connected');
+      return;
+    }
+
+    const message = {
+      message_id: `msg_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      session_id: this.sessionId,
+      type: "user_input",
+      data: {
+        text: text,
+        response_to: null,
+        attachments: [],
+        ui_references: [],
+        frontend_actions: []
+      }
+    };
+
+    this.ws.send(JSON.stringify(message));
+    console.log('📤 Sent:', message);
+  }
+
+  // Handle incoming director messages
+  handleDirectorMessage(message) {
+    const { data } = message;
+    
+    if (data.chat_data) {
+      console.log('💬 Chat:', data.chat_data.content);
+      
+      // Handle different chat types
+      switch (data.chat_data.type) {
+        case 'question':
+          console.log('❓ Question received:', data.chat_data.content);
+          break;
+        case 'progress':
+          console.log('📊 Progress:', data.chat_data.progress);
+          break;
+        case 'summary':
+          console.log('✅ Summary:', data.chat_data.content);
+          break;
+      }
+    }
+    
+    if (data.slide_data) {
+      console.log('🎨 Slides received:', data.slide_data.slides.length);
+    }
+  }
+
+  // Cleanup
+  disconnect() {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+}
+
+// Usage example
+async function runQuickStart() {
+  const client = new DecksterQuickStart();
+  
+  try {
+    // Connect to WebSocket
+    await client.connect();
+    
+    // Wait a moment for connection to establish
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Send a test message
+    client.sendMessage("Create a simple 5-slide pitch deck for a tech startup");
+    
+    // Keep connection open for responses
+    // In a real app, this would be managed by your UI framework
+    
+  } catch (error) {
+    console.error('Failed to start:', error);
+  }
+}
+
+// Run the example
+runQuickStart();
+```
+
+### Using with React
+
+```jsx
+// DecksterDemo.jsx
+import React, { useState, useEffect } from 'react';
+
+function DecksterDemo() {
+  const [connected, setConnected] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [inputText, setInputText] = useState('');
+  const [client, setClient] = useState(null);
+
+  useEffect(() => {
+    const quickstart = new DecksterQuickStart();
+    
+    quickstart.connect()
+      .then(() => {
+        setConnected(true);
+        setClient(quickstart);
+      })
+      .catch(err => console.error('Connection failed:', err));
+    
+    // Cleanup on unmount
+    return () => {
+      if (quickstart.ws) {
+        quickstart.disconnect();
+      }
+    };
+  }, []);
+
+  const sendMessage = () => {
+    if (client && inputText) {
+      client.sendMessage(inputText);
+      setMessages([...messages, { type: 'user', text: inputText }]);
+      setInputText('');
+    }
+  };
+
+  return (
+    <div>
+      <h2>Deckster WebSocket Demo</h2>
+      <div>Status: {connected ? '🟢 Connected' : '🔴 Disconnected'}</div>
+      
+      <div>
+        <input
+          type="text"
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+          placeholder="Type your message..."
+          disabled={!connected}
+        />
+        <button onClick={sendMessage} disabled={!connected}>
+          Send
+        </button>
+      </div>
+      
+      <div>
+        <h3>Messages:</h3>
+        {messages.map((msg, idx) => (
+          <div key={idx}>
+            {msg.type}: {msg.text}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+## Environment Configuration
+
+### Required Environment Variables
+
+```env
+# WebSocket URL (use wss:// for secure connections)
+NEXT_PUBLIC_API_URL=wss://your-app.up.railway.app
+
+# HTTP API URL (for authentication and file uploads)
+NEXT_PUBLIC_API_HTTP_URL=https://your-app.up.railway.app
+
+# Optional: API version
+NEXT_PUBLIC_API_VERSION=v1
+```
+
+### Framework-Specific Setup
+
+#### Next.js (.env.local)
+```env
+NEXT_PUBLIC_API_URL=wss://deckster-production.up.railway.app
+NEXT_PUBLIC_API_HTTP_URL=https://deckster-production.up.railway.app
+```
+
+#### Create React App (.env)
+```env
+REACT_APP_API_URL=wss://deckster-production.up.railway.app
+REACT_APP_API_HTTP_URL=https://deckster-production.up.railway.app
+```
+
+#### Vue.js (.env)
+```env
+VUE_APP_API_URL=wss://deckster-production.up.railway.app
+VUE_APP_API_HTTP_URL=https://deckster-production.up.railway.app
+```
+
 ## WebSocket Connection Setup
 
-### Basic Connection
+### Basic Connection with Authentication
 
 ```javascript
 class DecksterWebSocket {
-  constructor(url = 'wss://api.deckster.xyz/ws') {
-    this.url = url;
+  constructor(config = {}) {
+    this.url = config.url || process.env.NEXT_PUBLIC_API_URL || 'wss://deckster-production.up.railway.app';
+    this.httpUrl = config.httpUrl || process.env.NEXT_PUBLIC_API_HTTP_URL || 'https://deckster-production.up.railway.app';
     this.ws = null;
+    this.token = null;
     this.sessionId = null;
     this.messageHandlers = new Map();
     this.reconnectAttempts = 0;
@@ -42,14 +386,41 @@ class DecksterWebSocket {
     this.heartbeatInterval = null;
   }
 
-  async connect(token) {
+  async getToken() {
+    // Check if we have a valid token
+    const storedToken = localStorage.getItem('access_token');
+    const tokenExpiry = localStorage.getItem('token_expiry');
+    
+    if (storedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
+      return storedToken;
+    }
+    
+    // For development: get a new token
+    const response = await fetch(`${this.httpUrl}/api/dev/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: 'test_user' })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to get authentication token');
+    }
+    
+    const { access_token } = await response.json();
+    return access_token;
+  }
+
+  async connect(token = null) {
+    // Ensure we have a token
+    this.token = token || await this.getToken();
+    
     return new Promise((resolve, reject) => {
       try {
-        // Include JWT in connection URL or headers
-        this.ws = new WebSocket(`${this.url}?token=${token}`);
+        // Include JWT in connection URL (most compatible method)
+        this.ws = new WebSocket(`${this.url}/ws?token=${this.token}`);
         
         this.ws.onopen = () => {
-          console.log('WebSocket connected');
+          console.log('WebSocket connected successfully');
           this.reconnectAttempts = 0;
           this.startHeartbeat();
           resolve();
@@ -158,46 +529,50 @@ export function useDecksterWebSocket(token) {
 
 ## Authentication Methods
 
-### JWT in Headers (Recommended)
+The backend supports three methods for WebSocket authentication. Choose the one that works best with your WebSocket client library:
+
+### Method 1: Query Parameter (Recommended - Most Compatible)
 
 ```javascript
-class AuthenticatedWebSocket extends WebSocket {
-  constructor(url, token) {
-    super(url, [], {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-  }
-}
+// This method works with all WebSocket clients
+const token = await getToken();
+const ws = new WebSocket(`wss://deckster-production.up.railway.app/ws?token=${token}`);
 ```
 
-### JWT in First Message
+### Method 2: First Message Authentication
 
 ```javascript
-async connectWithAuth(token) {
-  this.ws = new WebSocket(this.url);
-  
-  return new Promise((resolve, reject) => {
-    this.ws.onopen = () => {
-      // Send token as first message
-      this.ws.send(JSON.stringify({
-        type: 'auth',
-        token: token
-      }));
-    };
+// Send token as the first message after connection
+const ws = new WebSocket('wss://deckster-production.up.railway.app/ws');
 
-    this.ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.type === 'auth_success') {
-        this.sessionId = message.session_id;
-        resolve();
-      } else if (message.type === 'auth_failed') {
-        reject(new Error(message.reason));
-      }
-    };
-  });
-}
+ws.onopen = () => {
+  // Must be the first message sent
+  ws.send(JSON.stringify({
+    token: token
+  }));
+};
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  
+  // Check for connection success message
+  if (message.type === 'connection' && message.status === 'connected') {
+    console.log('Authenticated successfully');
+    console.log('Session ID:', message.session_id);
+  }
+};
+```
+
+### Method 3: Custom Headers (Limited Browser Support)
+
+```javascript
+// Note: Not all browsers support custom headers in WebSocket
+// This method may not work in browser environments
+const ws = new WebSocket('wss://deckster-production.up.railway.app/ws', {
+  headers: {
+    'X-Auth-Token': token  // or 'Authorization': `Bearer ${token}`
+  }
+});
 ```
 
 ### Token Refresh Strategy
@@ -1345,28 +1720,142 @@ export function useDeckster(token) {
 
 ### Common Issues and Solutions
 
+#### Authentication Issues
+
+1. **"No authentication token available" Error**
+   ```
+   Error: No authentication token available
+   WebSocket closed: 1008 Missing authentication token
+   ```
+   **Solution**: You must provide a JWT token when connecting. The backend requires authentication for all WebSocket connections.
+   ```javascript
+   // ❌ Wrong - No token provided
+   const ws = new WebSocket('wss://deckster-production.up.railway.app/ws');
+   
+   // ✅ Correct - Token included
+   const token = await getToken();
+   const ws = new WebSocket(`wss://deckster-production.up.railway.app/ws?token=${token}`);
+   ```
+
+2. **"Failed to refresh access token" Error**
+   ```
+   Failed to refresh access token: Error: No authentication token available
+   ```
+   **Solution**: This indicates the frontend is trying to use a token that doesn't exist. Ensure you:
+   - First obtain a token from the `/api/dev/token` endpoint
+   - Store the token properly
+   - Pass it to your WebSocket connection
+
+3. **Connection Closes with Code 1008**
+   ```
+   WebSocket closed: 1008 Policy Violation
+   ```
+   **Solution**: This is an authentication failure. The token may be:
+   - Missing
+   - Invalid
+   - Expired
+   - Malformed
+
+   Verify your token is correct:
+   ```javascript
+   // Check token format (should be a JWT)
+   console.log('Token:', token);
+   // Should look like: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   ```
+
+#### Connection Issues
+
 1. **Connection Fails Immediately**
    - Check if token is valid and not expired
-   - Verify WebSocket URL is correct
-   - Ensure WSS is used for secure connections
+   - Verify WebSocket URL is correct (use `wss://` not `ws://`)
+   - Ensure you're hitting the `/ws` endpoint
    - Check browser console for CORS errors
 
-2. **Messages Not Being Received**
+2. **WebSocket Client Not Initialized**
+   ```
+   WebSocket client not initialized
+   ```
+   **Solution**: This suggests the WebSocket connection was never established. Ensure:
+   - You're calling the connection method
+   - You're waiting for the connection to complete
+   - You're handling connection errors
+
+#### Message Handling Issues
+
+1. **Messages Not Being Received**
    - Verify message handler is properly registered
    - Check if session ID is included in messages
    - Ensure WebSocket state is OPEN before sending
    - Look for parsing errors in message handling
 
-3. **Reconnection Loop**
-   - Implement maximum reconnection attempts
-   - Check if authentication is failing
-   - Verify server-side session handling
-   - Look for rate limiting issues
+2. **First Message Must Be Authentication**
+   If using Method 2 (first message auth), ensure no other messages are sent before authentication:
+   ```javascript
+   ws.onopen = () => {
+     // ✅ First message must be auth
+     ws.send(JSON.stringify({ token: token }));
+     
+     // ❌ Don't send other messages until authenticated
+     // ws.send(JSON.stringify({ type: 'user_input', ... }));
+   };
+   ```
 
-4. **UI Not Updating**
-   - Check if state updates are properly triggered
-   - Verify event listeners are correctly set up
-   - Ensure component re-rendering is working
-   - Look for errors in update handlers
+#### Development Environment Issues
+
+1. **404 on Token Endpoint**
+   ```
+   POST https://deckster-production.up.railway.app/api/dev/token 404
+   ```
+   **Solution**: The `/api/dev/token` endpoint is only available when the backend is running in development mode. For production, implement proper authentication.
+
+2. **Environment Variables Not Loading**
+   - Ensure your `.env` file is in the correct location
+   - Restart your development server after changing environment variables
+   - Verify variable names match your framework's requirements
+
+#### Quick Debugging Checklist
+
+1. **Verify Backend is Running**
+   ```javascript
+   fetch('https://deckster-production.up.railway.app/health')
+     .then(res => res.json())
+     .then(data => console.log('Backend status:', data));
+   ```
+
+2. **Test Token Endpoint**
+   ```javascript
+   fetch('https://deckster-production.up.railway.app/api/dev/token', {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({ user_id: 'test_user' })
+   })
+   .then(res => res.json())
+   .then(data => console.log('Token response:', data))
+   .catch(err => console.error('Token error:', err));
+   ```
+
+3. **Test WebSocket with Token**
+   ```javascript
+   // Complete test in browser console
+   async function testWebSocket() {
+     // Get token
+     const tokenRes = await fetch('https://deckster-production.up.railway.app/api/dev/token', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ user_id: 'test_user' })
+     });
+     const { access_token } = await tokenRes.json();
+     
+     // Connect with token
+     const ws = new WebSocket(`wss://deckster-production.up.railway.app/ws?token=${access_token}`);
+     
+     ws.onopen = () => console.log('✅ Connected!');
+     ws.onerror = (e) => console.error('❌ Error:', e);
+     ws.onclose = (e) => console.log('Connection closed:', e.code, e.reason);
+     ws.onmessage = (e) => console.log('Message:', JSON.parse(e.data));
+   }
+   
+   testWebSocket();
+   ```
 
 This guide provides a comprehensive foundation for integrating with the Deckster.xyz WebSocket API. Follow these patterns and best practices to build a robust, real-time presentation generation experience.

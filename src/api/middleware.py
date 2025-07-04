@@ -289,10 +289,14 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
 
 def setup_middleware(app):
     """Setup all middleware for the application."""
+    # Import settings to get CORS origins
+    from ..config.settings import get_settings
+    settings = get_settings()
+    
     # CORS middleware (configure based on your frontend)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Update for production
+        allow_origins=settings.cors_origins,  # Read from settings/environment
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
