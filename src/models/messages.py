@@ -210,7 +210,7 @@ class SystemMessage(BaseMessage):
 class ConnectionMessage(BaseModel):
     """WebSocket connection management messages."""
     type: Literal["connection"] = "connection"
-    status: Literal["connected", "authenticated", "disconnected", "error"]
+    status: Literal["connected", "authenticated", "disconnected", "error", "ping", "pong"]
     session_id: Optional[str] = None
     user_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -314,6 +314,12 @@ def validate_message(message_dict: Dict[str, Any]) -> BaseMessage:
         ValueError: If message type is invalid or structure is incorrect
     """
     message_type = message_dict.get("type")
+    
+    # Handle ping as a special connection message
+    if message_type == "ping":
+        message_dict["type"] = "connection"
+        message_dict["status"] = "ping"
+        message_type = "connection"
     
     type_mapping = {
         "user_input": UserInput,

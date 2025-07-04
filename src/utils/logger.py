@@ -100,6 +100,9 @@ else:
             """Handle logfire-style critical calls."""
             self._logger.critical(self._format_message(message, kwargs))
         
+        # Add warn as alias for warning (logfire compatibility)
+        warn = warning
+        
         def __repr__(self):
             """String representation."""
             return f"<MockLogfire wrapping {self._logger.name}>"
