@@ -12,11 +12,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements-prod.txt requirements.txt ./
+COPY requirements.txt ./
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements-prod.txt || \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Verify critical imports work (especially python-magic)
+RUN python -c "import magic; print('✓ python-magic installed successfully')" && \
+    python -c "from PIL import Image; print('✓ Pillow installed successfully')" && \
+    python -c "import fastapi; print('✓ FastAPI installed successfully')"
 
 # Copy application code
 COPY . .
@@ -25,6 +29,8 @@ COPY . .
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+# Cache bust to force rebuild: Update this when you need fresh build
+ENV CACHE_BUST=2025-01-04-v1
 
 # Expose port
 EXPOSE 8000
