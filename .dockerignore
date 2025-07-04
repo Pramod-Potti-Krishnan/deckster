@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+*.cover
+
+# Development
+.env
+.env.local
+.env.development
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Development scripts
+install_*.sh
+install_*.py
+verify_*.py
+test_redis*.py
+cleanup_*.sh
+
+# Large/unnecessary files for production
+requirements-*.txt
+!requirements.txt
+!requirements-prod.txt
+*.yml
+*.yaml
+!railway.yml
