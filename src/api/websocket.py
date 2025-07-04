@@ -242,8 +242,11 @@ class WebSocketHandler:
                 )
                 return
             
+            # Check for test messages
+            if text.lower().startswith("test:"):
+                await self._handle_test_message(text)
             # Check if this is a clarification response
-            if message.data.get("response_to"):
+            elif message.data.get("response_to"):
                 await self._handle_clarification_response(message)
             else:
                 # New presentation request
@@ -267,7 +270,7 @@ class WebSocketHandler:
             await self._send_chat_message(
                 message_type="info",
                 content="I'm analyzing your request...",
-                progress={"stage": "analysis", "percentage": 10}
+                progress=self._create_progress_update("analysis", 10)
             )
             
             # Start workflow
@@ -339,7 +342,7 @@ class WebSocketHandler:
             await self._send_chat_message(
                 message_type="info",
                 content="Creating your presentation structure...",
-                progress={"stage": "generation", "percentage": 30}
+                progress=self._create_progress_update("generation", 30)
             )
         
         elif phase == "completed":
@@ -349,6 +352,70 @@ class WebSocketHandler:
                 await self._send_presentation(presentation)
             else:
                 await self._send_error("Presentation generation failed")
+    
+    async def _handle_test_message(self, text: str):
+        """Handle test messages for debugging message structures."""
+        test_command = text[5:].strip().lower()  # Remove "test:" prefix
+        
+        if test_command == "progress":
+            # Test progress updates
+            stages = [
+                ("analysis", 10, None),
+                ("generation", 30, ["researcher", "ux_architect"]),
+                ("generation", 60, ["visual_designer", "data_analyst"]),
+                ("completed", 100, None)
+            ]
+            
+            for stage, percentage, agents in stages:
+                await self._send_chat_message(
+                    message_type="info",
+                    content=f"Testing {stage} stage at {percentage}%",
+                    progress=self._create_progress_update(stage, percentage, agents)
+                )
+                await asyncio.sleep(1)  # Small delay between messages
+        
+        elif test_command == "empty":
+            # Test empty DirectorMessage (should get default chat_data)
+            try:
+                message = DirectorMessage(
+                    session_id=self.session_id,
+                    source="director_inbound"
+                    # Intentionally not providing chat_data or slide_data
+                )
+                await self.websocket.send_json(message.model_dump(mode='json'))
+            except Exception as e:
+                await self._send_error(f"Empty message test failed: {str(e)}")
+        
+        elif test_command == "structures":
+            # Test various message structures
+            # 1. Chat only
+            await self._send_chat_message(
+                message_type="info",
+                content="Test: Chat data only message"
+            )
+            
+            # 2. Chat with progress
+            await self._send_chat_message(
+                message_type="info",
+                content="Test: Chat with progress",
+                progress=self._create_progress_update("analysis", 25, ["director"])
+            )
+            
+            # 3. Question with actions
+            await self._send_chat_message(
+                message_type="question",
+                content="Test: Question with actions",
+                actions=[
+                    {"action_id": "yes", "type": "custom", "label": "Yes", "primary": True},
+                    {"action_id": "no", "type": "custom", "label": "No"}
+                ]
+            )
+        
+        else:
+            await self._send_chat_message(
+                message_type="info",
+                content=f"Unknown test command: {test_command}. Available: progress, empty, structures"
+            )
     
     async def _handle_frontend_action(self, message: FrontendAction):
         """Handle frontend action message."""
@@ -406,7 +473,57 @@ class WebSocketHandler:
             chat_data=chat_data
         )
         
-        await self.websocket.send_json(message.model_dump(mode='json'))
+        # Debug logging for frontend team
+        message_dict = message.model_dump(mode='json')
+        api_logger.debug(
+            f"Sending DirectorMessage to frontend: {json.dumps(message_dict, indent=2)}",
+            session_id=self.session_id,
+            message_type="director_inbound",
+            has_chat_data=bool(chat_data),
+            has_slide_data=False
+        )
+        
+        await self.websocket.send_json(message_dict)
+    
+    def _create_progress_update(
+        self, 
+        stage: str, 
+        percentage: int,
+        active_agents: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Create a progress update with agent statuses."""
+        # Default agent list if none provided
+        all_agents = ["director", "researcher", "ux_architect", "visual_designer", "data_analyst", "ux_analyst"]
+        
+        # Build agent statuses
+        agent_statuses = {}
+        if active_agents:
+            for agent in all_agents:
+                if agent in active_agents:
+                    agent_statuses[agent] = "active"
+                elif all_agents.index(agent) < all_agents.index(active_agents[0]):
+                    agent_statuses[agent] = "completed"
+                else:
+                    agent_statuses[agent] = "pending"
+        else:
+            # Default status based on stage
+            if stage == "analysis":
+                agent_statuses = {agent: "pending" for agent in all_agents}
+                agent_statuses["director"] = "active"
+            elif stage == "generation":
+                agent_statuses["director"] = "completed"
+                agent_statuses["researcher"] = "active"
+                agent_statuses["ux_architect"] = "active"
+                for agent in ["visual_designer", "data_analyst", "ux_analyst"]:
+                    agent_statuses[agent] = "pending"
+            else:
+                agent_statuses = {agent: "completed" for agent in all_agents}
+        
+        return {
+            "stage": stage,
+            "percentage": percentage,
+            "agentStatuses": agent_statuses
+        }
     
     async def _send_clarification_questions(self, clarification_round):
         """Send clarification questions to client."""
@@ -487,11 +604,22 @@ class WebSocketHandler:
                         "type": "custom",
                         "label": "Make Changes"
                     }
-                ]
+                ],
+                progress=self._create_progress_update("completed", 100)
             )
         )
         
-        await self.websocket.send_json(message.model_dump(mode='json'))
+        # Debug logging for frontend team
+        message_dict = message.model_dump(mode='json')
+        api_logger.debug(
+            f"Sending DirectorMessage to frontend: {json.dumps(message_dict, indent=2)}",
+            session_id=self.session_id,
+            message_type="director_outbound",
+            has_chat_data=bool(message.chat_data),
+            has_slide_data=bool(message.slide_data)
+        )
+        
+        await self.websocket.send_json(message_dict)
     
     async def _send_error(self, message: str, code: Optional[str] = None):
         """Send error message to client."""

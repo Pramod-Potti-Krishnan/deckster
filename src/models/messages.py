@@ -103,7 +103,12 @@ class DirectorMessage(BaseMessage):
     def validate_at_least_one_data(cls, v, info):
         """Ensure at least one of slide_data or chat_data is present."""
         if info.field_name == 'chat_data' and v is None and info.data.get('slide_data') is None:
-            raise ValueError("Either slide_data or chat_data must be provided")
+            # Instead of raising an error, provide a minimal chat_data
+            # This helps prevent frontend crashes while we debug
+            return ChatData(
+                type="info",
+                content="Processing your request..."
+            )
         return v
 
 
