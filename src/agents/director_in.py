@@ -461,7 +461,7 @@ Requirements:
 Similar Successful Presentations:
 {json.dumps([{
     'title': p.get('title'),
-    'structure': p.get('structure', {}).get('slides', [])[:3]  # First 3 slides
+    'structure': p.get('structure', {}).get('slides', [])[:3]
 } for p in similar_presentations], indent=2)}
 
 Generate a complete presentation structure including:
