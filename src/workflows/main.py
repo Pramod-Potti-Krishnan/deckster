@@ -367,9 +367,36 @@ def all_agents_complete(state: WorkflowState) -> str:
     return "wait"
 
 
+# Mock workflow for when LangGraph is not available
+class MockWorkflow:
+    """Mock workflow implementation for Phase 1 without LangGraph."""
+    
+    async def astream(self, state: WorkflowState, config=None):
+        """Mock async stream that just runs analyze_request."""
+        logger.info("Running mock workflow (LangGraph not available)")
+        
+        # Just run the analyze step for Phase 1
+        try:
+            updates = await analyze_request(state)
+            state.update(updates)
+            yield state
+        except Exception as e:
+            logger.error(f"Mock workflow error: {e}")
+            state.update({
+                "current_phase": "error",
+                "agent_errors": {"workflow": str(e)},
+                "updated_at": datetime.utcnow()
+            })
+            yield state
+
+
 # Build the graph
 def create_workflow() -> Graph:
     """Create the main workflow graph."""
+    if not LANGGRAPH_AVAILABLE:
+        # Return a mock workflow for Phase 1
+        return MockWorkflow()
+    
     # Initialize workflow
     workflow = StateGraph(WorkflowState)
     

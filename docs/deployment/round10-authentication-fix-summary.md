@@ -1,4 +1,4 @@
-# Round 10 Authentication Fix Summary
+# Round 10-11 Authentication & WebSocket Fix Summary
 
 ## Changes Made to Fix Frontend Authentication Issues
 
@@ -95,9 +95,49 @@ These changes need to be deployed to Railway for the fixes to take effect:
 2. Railway will auto-deploy
 3. Frontend can then use either endpoint to get tokens
 
+## Round 11 - New Issues Discovered
+
+After deploying Round 10 fixes, we discovered new issues from frontend testing:
+
+### Issues Found
+1. **LangGraph StateGraph Error**: `ERROR: StateGraph() takes no arguments`
+   - Backend WebSockets connect but immediately crash
+   - Newer LangGraph version requires state schema parameter
+   
+2. **Frontend WebSocket Loop**: `WebSocket client not initialized` (infinite loop)
+   - Frontend retry logic causing infinite error messages
+   - Need better initialization state management
+
+3. **Authentication Working**: ✅ Token acquisition and WebSocket connection successful
+   - `/api/auth/demo` endpoint working correctly
+   - WebSocket authentication passing
+
+### Round 11 Action Plan
+
+#### Backend Fixes (High Priority)
+1. **Fix LangGraph StateGraph initialization**
+   ```python
+   # Change from: StateGraph()
+   # To: StateGraph(DirectorWorkflowState)
+   ```
+
+2. **Update WebSocket message handling**
+   - Fix Director agent initialization
+   - Ensure proper error handling in WebSocket handlers
+
+#### Frontend Recommendations
+1. **Add WebSocket state management**
+   - Prevent initialization loops
+   - Add proper null checks
+   - Implement circuit breaker pattern
+
+2. **Improve error handling**
+   - Display connection status in UI
+   - Implement retry with exponential backoff
+
 ## Next Steps
 
-1. Deploy these changes to Railway
-2. Frontend team updates their code to use `/api/auth/demo`
-3. Test the complete flow
-4. Consider implementing proper user authentication for production
+1. ✅ Round 10: Authentication fixed
+2. 🔧 Round 11: Fix LangGraph and WebSocket stability  
+3. 🧪 Test: Complete end-to-end flow
+4. 🚀 Production: Implement proper user authentication

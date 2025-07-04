@@ -89,7 +89,11 @@ class WebSocketHandler:
         self.workflow_state: Optional[WorkflowState] = None
         self.redis = None
         self.supabase = None
-        self.workflow_runner = get_workflow_runner()
+        try:
+            self.workflow_runner = get_workflow_runner()
+        except Exception as e:
+            api_logger.error(f"Failed to initialize workflow runner: {e}")
+            self.workflow_runner = None
     
     async def initialize(self):
         """Initialize handler resources."""
@@ -237,6 +241,14 @@ class WebSocketHandler:
     async def _start_presentation_generation(self, user_input: UserInput):
         """Start a new presentation generation workflow."""
         try:
+            # Check if workflow runner is available
+            if not self.workflow_runner:
+                await self._send_error(
+                    "Presentation generation system is currently unavailable",
+                    code="WORKFLOW_UNAVAILABLE"
+                )
+                return
+            
             # Send acknowledgment
             await self._send_chat_message(
                 message_type="info",
@@ -256,12 +268,22 @@ class WebSocketHandler:
         
         except Exception as e:
             log_error(e, "workflow_start_failed", {
-                "session_id": self.session_id
+                "session_id": self.session_id,
+                "error_type": type(e).__name__,
+                "error_message": str(e)
             })
-            await self._send_error(
-                "Failed to start presentation generation",
-                code="WORKFLOW_ERROR"
-            )
+            
+            # Handle specific LangGraph errors
+            if "StateGraph" in str(e):
+                await self._send_error(
+                    "Workflow system temporarily unavailable. We're using a simplified processor for now.",
+                    code="WORKFLOW_FALLBACK"
+                )
+            else:
+                await self._send_error(
+                    "Failed to start presentation generation",
+                    code="WORKFLOW_ERROR"
+                )
     
     async def _handle_clarification_response(self, message: UserInput):
         """Handle clarification response from user."""
