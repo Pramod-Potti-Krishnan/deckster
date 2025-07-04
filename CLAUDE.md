@@ -96,13 +96,18 @@ deckster/
   - Frontend fixed message.data access pattern
   - Backend added debug logging, progress.agentStatuses, and test commands
   - RunContext() and datetime serialization issues fixed
+- **Round 15**: Critical bug fixes and session improvements 🔧 IN PROGRESS
+  - Frontend identified slide_data assignment bug (object vs array)
+  - Backend bypassed Supabase due to persistent RLS errors
+  - Improved session initialization sequence
+  - Better error handling with structured chat messages
 
-### Current Status (Round 14 Complete)
-- ✅ Backend fully operational with all requested features
-- ✅ Frontend correctly handling DirectorMessage structure
-- ✅ Debug logging and test commands available
-- ✅ Progress updates include agent statuses
-- 🚀 Ready for full integration testing
+### Current Status (Round 15 In Progress)
+- ✅ Supabase temporarily bypassed (using Redis only)
+- ✅ Session initialization sequence fixed
+- ✅ Error responses improved
+- 🔧 Frontend implementing slide_data.slides extraction fix
+- 🚀 Close to full end-to-end functionality
 
 ### Important Environment Notes
 - **CORS_ORIGINS** is intentionally NOT an environment variable (removed in Round 9)

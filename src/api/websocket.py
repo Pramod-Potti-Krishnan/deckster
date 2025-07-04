@@ -89,6 +89,7 @@ class WebSocketHandler:
         self.workflow_state: Optional[WorkflowState] = None
         self.redis = None
         self.supabase = None
+        self.initialized = False
         try:
             self.workflow_runner = get_workflow_runner()
         except Exception as e:
@@ -123,21 +124,26 @@ class WebSocketHandler:
         # Set logging context
         set_session_id(self.session_id)
         set_user_id(self.token_data.user_id)
+        
+        # Mark initialization complete
+        self.initialized = True
     
     async def _create_session(self):
         """Create a new session."""
-        try:
-            # Try to create session in Supabase
-            await self.supabase.create_session(
-                session_id=self.session_id,
-                user_id=self.token_data.user_id,
-                expires_hours=24
-            )
-        except Exception as e:
-            # If Supabase fails (RLS policy issue), just log and continue with Redis
-            api_logger.warning(f"Supabase session creation failed, using Redis only: {e}")
+        # TEMPORARY: Skip Supabase due to persistent RLS policy issues
+        # TODO: Fix Supabase RLS policies and re-enable this code
+        # try:
+        #     # Try to create session in Supabase
+        #     await self.supabase.create_session(
+        #         session_id=self.session_id,
+        #         user_id=self.token_data.user_id,
+        #         expires_hours=24
+        #     )
+        # except Exception as e:
+        #     # If Supabase fails (RLS policy issue), just log and continue with Redis
+        #     api_logger.warning(f"Supabase session creation failed, using Redis only: {e}")
         
-        # Always cache in Redis (this is our primary session store for now)
+        # Only use Redis for sessions (this works reliably)
         await self.redis.set_session(
             self.session_id,
             {
@@ -147,11 +153,20 @@ class WebSocketHandler:
                 "expires_at": (datetime.utcnow() + timedelta(hours=24)).isoformat()
             }
         )
+        api_logger.info(f"Session created in Redis: {self.session_id}")
     
     async def handle_connection(self):
         """Main handler for WebSocket connection."""
         try:
-            # Send connection success message
+            # Verify session was created successfully before proceeding
+            session_exists = await self.redis.get_session(self.session_id)
+            if not session_exists:
+                api_logger.error(f"Session not found after initialization: {self.session_id}")
+                await self._send_error("Session initialization failed", code="SESSION_ERROR")
+                await self.websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+                return
+            
+            # NOW send connection success message
             await self._send_connection_message("connected")
             
             # Main message loop
@@ -181,6 +196,11 @@ class WebSocketHandler:
     
     async def _process_message(self, raw_message: Dict[str, Any]):
         """Process incoming message."""
+        # Check if fully initialized
+        if not self.initialized:
+            await self._send_error("Connection not fully initialized", code="NOT_READY")
+            return
+            
         request_id = f"req_{uuid4().hex[:12]}"
         set_request_id(request_id)
         
@@ -290,17 +310,25 @@ class WebSocketHandler:
                 "error_message": str(e)
             })
             
-            # Handle specific LangGraph errors
-            if "StateGraph" in str(e):
-                await self._send_error(
-                    "Workflow system temporarily unavailable. We're using a simplified processor for now.",
-                    code="WORKFLOW_FALLBACK"
-                )
+            # Send structured error response that frontend can handle
+            error_message = str(e)
+            if "StateGraph" in error_message:
+                error_code = "WORKFLOW_UNAVAILABLE"
+                user_message = "Workflow system temporarily unavailable. Using simplified processor."
             else:
-                await self._send_error(
-                    "Failed to start presentation generation",
-                    code="WORKFLOW_ERROR"
-                )
+                error_code = "GENERATION_FAILED"
+                user_message = "Unable to start presentation generation. Please try again."
+            
+            # Send as chat message so frontend can display it properly
+            await self._send_chat_message(
+                message_type="error",
+                content={
+                    "message": user_message,
+                    "error": error_message,
+                    "code": error_code
+                },
+                progress=self._create_progress_update("error", 0)
+            )
     
     async def _handle_clarification_response(self, message: UserInput):
         """Handle clarification response from user."""
@@ -516,6 +544,8 @@ class WebSocketHandler:
                 agent_statuses["ux_architect"] = "active"
                 for agent in ["visual_designer", "data_analyst", "ux_analyst"]:
                     agent_statuses[agent] = "pending"
+            elif stage == "error":
+                agent_statuses = {agent: "error" for agent in all_agents}
             else:
                 agent_statuses = {agent: "completed" for agent in all_agents}
         
