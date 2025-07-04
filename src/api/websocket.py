@@ -6,7 +6,7 @@ Implements the communication protocol defined in comms_protocol.md.
 import json
 import asyncio
 from typing import Dict, Any, Optional, Set, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 from fastapi import WebSocket, WebSocketDisconnect, Depends, status
@@ -105,7 +105,15 @@ class WebSocketHandler:
             self.session_id = f"session_{uuid4().hex[:12]}"
             await self._create_session()
         else:
-            session_data = await self.supabase.get_session(self.session_id)
+            # Try Redis first, then Supabase
+            session_data = await self.redis.get_session(self.session_id)
+            if not session_data:
+                try:
+                    session_data = await self.supabase.get_session(self.session_id)
+                except Exception as e:
+                    api_logger.warning(f"Supabase session lookup failed: {e}")
+                    session_data = None
+                    
             if not session_data:
                 await self._create_session()
         
@@ -118,19 +126,25 @@ class WebSocketHandler:
     
     async def _create_session(self):
         """Create a new session."""
-        await self.supabase.create_session(
-            session_id=self.session_id,
-            user_id=self.token_data.user_id,
-            expires_hours=24
-        )
+        try:
+            # Try to create session in Supabase
+            await self.supabase.create_session(
+                session_id=self.session_id,
+                user_id=self.token_data.user_id,
+                expires_hours=24
+            )
+        except Exception as e:
+            # If Supabase fails (RLS policy issue), just log and continue with Redis
+            api_logger.warning(f"Supabase session creation failed, using Redis only: {e}")
         
-        # Also cache in Redis
+        # Always cache in Redis (this is our primary session store for now)
         await self.redis.set_session(
             self.session_id,
             {
                 "user_id": self.token_data.user_id,
                 "created_at": datetime.utcnow().isoformat(),
-                "websocket_id": self.websocket_id
+                "websocket_id": self.websocket_id,
+                "expires_at": (datetime.utcnow() + timedelta(hours=24)).isoformat()
             }
         )
     

@@ -26,7 +26,8 @@ class Settings(BaseSettings):
             "http://localhost:3000",
             "http://localhost:5173",
             "https://www.deckster.xyz",
-            "https://deckster.xyz"
+            "https://deckster.xyz",
+            "https://*.vercel.app"
         ],
         env="CORS_ORIGINS"
     )
@@ -129,9 +130,10 @@ class Settings(BaseSettings):
             if not v:
                 return [
                     "http://localhost:3000",
-                    "http://localhost:5173",
+                    "http://localhost:5173", 
                     "https://www.deckster.xyz",
-                    "https://deckster.xyz"
+                    "https://deckster.xyz",
+                    "https://*.vercel.app"
                 ]
             # Try JSON first for backward compatibility
             if v.startswith('['):
@@ -150,8 +152,9 @@ class Settings(BaseSettings):
             return origins if origins else [
                 "http://localhost:3000",
                 "http://localhost:5173",
-                "https://www.deckster.xyz",
-                "https://deckster.xyz"
+                "https://www.deckster.xyz", 
+                "https://deckster.xyz",
+                "https://*.vercel.app"
             ]
         return v
     
