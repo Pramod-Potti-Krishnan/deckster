@@ -30,7 +30,7 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 # Cache bust to force rebuild: Update this when you need fresh build
-ENV CACHE_BUST=2025-01-04-v1
+ENV CACHE_BUST=2025-01-04-v2-logfire
 
 # Expose port
 EXPOSE 8000
