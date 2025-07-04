@@ -23,7 +23,9 @@ except ImportError:
     PYDANTIC_AI_AVAILABLE = False
     # Create mock classes for compatibility
     class Agent: pass
-    class RunContext: pass
+    class RunContext:
+        def __init__(self, deps=None):
+            self.deps = deps
     class FallbackModel: pass
     class ModelRetry(Exception): pass
 
@@ -208,7 +210,7 @@ class BaseAgent(ABC):
             to_agent=self.agent_id,
             action=action,
             parameters=parameters,
-            context=context.model_dump(),
+            context=context.model_dump(mode='json'),
             payload=parameters  # AgentMessage requires payload field
         )
         
@@ -286,6 +288,28 @@ class BaseAgent(ABC):
         start_time = time.time()
         
         try:
+            # Check if pydantic_ai is available and ai_agent is initialized
+            if not PYDANTIC_AI_AVAILABLE or self.ai_agent is None:
+                # Return a mock response for Phase 1
+                agent_logger.info(
+                    "Using mock LLM response (pydantic_ai not available or agent not initialized)",
+                    agent_id=self.agent_id
+                )
+                
+                # Log mock LLM call
+                latency_ms = (time.time() - start_time) * 1000
+                log_llm_call(
+                    model="mock",
+                    provider="mock",
+                    prompt_tokens=len(prompt.split()),
+                    completion_tokens=50,
+                    latency_ms=latency_ms,
+                    temperature=temperature or self.config.temperature
+                )
+                
+                # Return a simple mock response
+                return f"Mock response for prompt: {prompt[:100]}..."
+            
             # Create run context
             run_context = RunContext(deps=context)
             
@@ -363,7 +387,7 @@ class BaseAgent(ABC):
         for target in target_agents:
             await redis.publish_message(
                 channel=target,
-                message=message.model_dump()
+                message=message.model_dump(mode='json')
             )
     
     async def subscribe_to_messages(self, callback: callable):
@@ -507,7 +531,7 @@ class BaseAgent(ABC):
                 correlation_id=context.correlation_id,
                 status=output.status,
                 input_data=request.parameters,
-                output_data=output.model_dump(),
+                output_data=output.model_dump(mode='json'),
                 processing_time_ms=int(processing_time_ms),
                 tokens_used=getattr(output, "tokens_used", None),
                 error_message=error_message

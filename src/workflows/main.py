@@ -102,13 +102,13 @@ async def analyze_request(state: WorkflowState) -> Dict[str, Any]:
     # Execute analysis
     result = await director.execute(
         action="analyze_request",
-        parameters={"user_input": state["user_input"].model_dump()},
+        parameters={"user_input": state["user_input"].model_dump(mode='json')},
         context=context
     )
     
     # Update state based on result
     updates = {
-        "requirement_analysis": result.analysis.model_dump() if result.analysis else None,
+        "requirement_analysis": result.analysis.model_dump(mode='json') if result.analysis else None,
         "updated_at": datetime.utcnow()
     }
     
@@ -168,7 +168,7 @@ async def process_clarification_response(state: WorkflowState) -> Dict[str, Any]
     
     result = await director.execute(
         action="process_clarification_response",
-        parameters={"response": latest_response.model_dump()},
+        parameters={"response": latest_response.model_dump(mode='json')},
         context=context
     )
     
@@ -212,7 +212,7 @@ async def create_structure(state: WorkflowState) -> Dict[str, Any]:
     
     # Gather all requirements
     requirements = {
-        "user_input": state["user_input"].model_dump(),
+        "user_input": state["user_input"].model_dump(mode='json'),
         "analysis": state.get("requirement_analysis", {}),
         "clarifications": [
             {

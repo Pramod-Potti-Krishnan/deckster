@@ -195,7 +195,7 @@ class SupabaseStore:
             "session_id": session_id,
             "title": presentation.title,
             "description": presentation.description,
-            "structure": presentation.model_dump(),
+            "structure": presentation.model_dump(mode='json'),
             "presentation_type": presentation.metadata.get("presentation_type"),
             "industry": presentation.metadata.get("industry"),
             "target_audience": presentation.metadata.get("target_audience"),

@@ -172,7 +172,7 @@ Output structured JSON responses according to the defined schemas."""
             analysis = await self._run_requirement_analysis(user_input, context)
             
             # Cache result
-            await self.cache_result(cache_key, analysis.model_dump(), ttl=3600)
+            await self.cache_result(cache_key, analysis.model_dump(mode='json'), ttl=3600)
         
         # Determine next step
         if analysis.completeness_score < self.config.min_completeness_score:
@@ -327,7 +327,7 @@ Missing Information:
 {json.dumps(missing_info, indent=2)}
 
 Previous Questions Asked:
-{json.dumps([round.model_dump() for round in self.clarification_history.get(context.session_id, [])], indent=2)}
+{json.dumps([round.model_dump(mode='json') for round in self.clarification_history.get(context.session_id, [])], indent=2)}
 
 Generate 3-5 specific, actionable questions that will help gather the missing information.
 For each question:
