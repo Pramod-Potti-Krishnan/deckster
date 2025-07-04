@@ -3,14 +3,11 @@ nixPkgs = ["python311", "gcc"]
 
 [phases.install]
 cmds = [
-    "pip install --upgrade pip",
-    "pip install -r requirements-prod.txt || pip install -r requirements.txt"
+    "python -m pip install -r requirements-prod.txt || python -m pip install -r requirements.txt"
 ]
 
 [start]
-cmd = "uvicorn src.api.main:app --host 0.0.0.0 --port $PORT --workers 1"
+cmd = "python -m uvicorn src.api.main:app --host 0.0.0.0 --port $PORT --workers 1"
 
 [variables]
 PYTHONPATH = "/app"
-PIP_NO_CACHE_DIR = "1"
-PIP_DISABLE_PIP_VERSION_CHECK = "1"
