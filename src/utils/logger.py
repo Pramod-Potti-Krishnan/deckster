@@ -14,8 +14,17 @@ from functools import wraps
 import asyncio
 import time
 
-import logfire
-from logfire import Logger
+# Optional import - logfire for observability
+try:
+    import logfire
+    from logfire import Logger
+    LOGFIRE_AVAILABLE = True
+except ImportError:
+    LOGFIRE_AVAILABLE = False
+    print("Warning: logfire not available, using standard logging")
+    import logging
+    logging.basicConfig(level=logging.INFO)
+
 from pydantic import BaseModel
 
 
@@ -33,29 +42,38 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 APP_ENV = os.getenv("APP_ENV", "development")
 
 
-# Initialize LogFire
-if LOGFIRE_TOKEN:
-    logfire.configure(
-        token=LOGFIRE_TOKEN,
-        project_name=LOGFIRE_PROJECT,
-        environment=APP_ENV,
-        console=APP_ENV == "development",  # Console output in development
-        service_name="presentation-generator-api"
-    )
+# Initialize LogFire or fallback logger
+if LOGFIRE_AVAILABLE:
+    if LOGFIRE_TOKEN:
+        logfire.configure(
+            token=LOGFIRE_TOKEN,
+            project_name=LOGFIRE_PROJECT,
+            environment=APP_ENV,
+            console=APP_ENV == "development",  # Console output in development
+            service_name="presentation-generator-api"
+        )
+    else:
+        # Fallback to console logging if no LogFire token
+        logfire.configure(
+            console=True,
+            service_name="presentation-generator-api"
+        )
 else:
-    # Fallback to console logging if no LogFire token
-    logfire.configure(
-        console=True,
-        service_name="presentation-generator-api"
-    )
+    # Create a mock logfire object for compatibility
+    class MockLogfire:
+        def __getattr__(self, name):
+            return logging.getLogger("presentation-generator")
+    
+    logfire = MockLogfire()
 
 
 # Create logger instances
-logger = logfire.get_logger("app")
-agent_logger = logfire.get_logger("agents")
-api_logger = logfire.get_logger("api")
-storage_logger = logfire.get_logger("storage")
-security_logger = logfire.get_logger("security")
+# Note: logfire doesn't have get_logger method, using logfire directly
+logger = logfire
+agent_logger = logfire
+api_logger = logfire
+storage_logger = logfire
+security_logger = logfire
 
 
 # Structured log models

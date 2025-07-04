@@ -1,4 +1,5 @@
 -- Enable Extensions
+
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "vector";
@@ -6,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 
 -- Create Sessions Table
+
 -- Sessions table for managing user sessions
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
@@ -38,6 +40,7 @@ CREATE TRIGGER update_sessions_updated_at BEFORE UPDATE
 
 
 -- Create Presentations Table
+
 -- Presentations table with vector embeddings
 CREATE TABLE IF NOT EXISTS presentations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -72,6 +75,7 @@ CREATE TRIGGER update_presentations_updated_at BEFORE UPDATE
 
 
 -- Create Visual Assets Table
+
 -- Visual assets table for storing generated images and graphics
 CREATE TABLE IF NOT EXISTS visual_assets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -102,6 +106,7 @@ WITH (lists = 50);
 
 
 -- Create Agent Outputs Table
+
 -- Agent outputs table for tracking all agent responses
 CREATE TABLE IF NOT EXISTS agent_outputs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -126,6 +131,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_outputs_created_at ON agent_outputs(created
 
 
 -- Create Similarity Functions
+
 -- Function to find similar presentations
 CREATE OR REPLACE FUNCTION match_presentations(
     query_embedding vector(1536),
@@ -216,6 +222,7 @@ $$;
 
 
 -- Create RLS Policies
+
 -- Enable Row Level Security
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE presentations ENABLE ROW LEVEL SECURITY;
@@ -283,3 +290,5 @@ CREATE POLICY "Users can view own agent outputs" ON agent_outputs
             AND s.user_id = auth.uid()::text
         )
     );
+
+

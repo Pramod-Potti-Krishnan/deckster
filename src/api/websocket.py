@@ -5,7 +5,7 @@ Implements the communication protocol defined in comms_protocol.md.
 
 import json
 import asyncio
-from typing import Dict, Any, Optional, Set
+from typing import Dict, Any, Optional, Set, List
 from datetime import datetime
 from uuid import uuid4
 

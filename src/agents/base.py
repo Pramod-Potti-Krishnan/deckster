@@ -12,9 +12,20 @@ import time
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
-from pydantic_ai.models import ModelMessage, FallbackModel
-from pydantic_ai.exceptions import ModelRetry
+
+# Make pydantic_ai optional
+try:
+    from pydantic_ai import Agent, RunContext
+    from pydantic_ai.models import ModelMessage, FallbackModel
+    from pydantic_ai.exceptions import ModelRetry
+    PYDANTIC_AI_AVAILABLE = True
+except ImportError:
+    PYDANTIC_AI_AVAILABLE = False
+    # Create mock classes for compatibility
+    class Agent: pass
+    class RunContext: pass
+    class FallbackModel: pass
+    class ModelRetry(Exception): pass
 
 from ..models.agents import AgentOutput, AgentMessage, AgentRequest, AgentResponse
 from ..utils.logger import agent_logger, log_agent_request, log_agent_response, log_llm_call, log_error
@@ -86,21 +97,26 @@ class BaseAgent(ABC):
     
     def _init_pydantic_agent(self):
         """Initialize the Pydantic AI agent."""
-        # Create fallback model configuration
-        models = [self.config.model_primary] + self.config.model_fallbacks
-        fallback_model = FallbackModel(*models)
-        
-        # Load system prompt
-        system_prompt = self._load_system_prompt()
-        
-        # Create agent
-        self.ai_agent = Agent(
-            name=self.agent_id,
-            model=fallback_model,
-            system_prompt=system_prompt,
-            result_type=self.get_output_type(),
-            retries=self.config.max_retries
-        )
+        if PYDANTIC_AI_AVAILABLE:
+            # Create fallback model configuration
+            models = [self.config.model_primary] + self.config.model_fallbacks
+            fallback_model = FallbackModel(*models)
+            
+            # Load system prompt
+            system_prompt = self._load_system_prompt()
+            
+            # Create agent
+            self.ai_agent = Agent(
+                name=self.agent_id,
+                model=fallback_model,
+                system_prompt=system_prompt,
+                result_type=self.get_output_type(),
+                retries=self.config.max_retries
+            )
+        else:
+            # Fallback: Store config for direct API calls
+            self.system_prompt = self._load_system_prompt()
+            self.ai_agent = None
     
     def _load_system_prompt(self) -> str:
         """Load system prompt from file or return default."""

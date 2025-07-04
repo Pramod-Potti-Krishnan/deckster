@@ -9,9 +9,20 @@ import operator
 import asyncio
 from uuid import uuid4
 
-from langgraph import StateGraph, END
-from langgraph.prebuilt import ToolExecutor, ToolInvocation
-from langgraph.graph import Graph
+# Make langgraph optional
+try:
+    from langgraph import StateGraph, END
+    from langgraph.prebuilt import ToolExecutor, ToolInvocation
+    from langgraph.graph import Graph
+    LANGGRAPH_AVAILABLE = True
+except ImportError:
+    LANGGRAPH_AVAILABLE = False
+    # Define fallback constants
+    END = "END"
+    class StateGraph: pass
+    class ToolExecutor: pass
+    class ToolInvocation: pass
+    class Graph: pass
 
 from ..models.messages import (
     UserInput, PresentationRequest, ClarificationRound,
