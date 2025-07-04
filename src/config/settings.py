@@ -21,13 +21,14 @@ class Settings(BaseSettings):
     # API Configuration
     api_prefix: str = "/api/v1"
     websocket_path: str = "/ws"
-    cors_origins: List[str] = Field(
+    cors_origins: Union[str, List[str]] = Field(
         default=[
             "http://localhost:3000",
             "http://localhost:5173",
             "https://www.deckster.xyz",
             "https://deckster.xyz"
-        ]
+        ],
+        env="CORS_ORIGINS"
     )
     cors_allow_vercel_previews: bool = Field(default=True)
     
@@ -121,6 +122,39 @@ class Settings(BaseSettings):
             raise ValueError(f"app_env must be one of {allowed}")
         return v
     
+    @field_validator("cors_origins", mode="before")
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins from string or list."""
+        if isinstance(v, str):
+            if not v:
+                return [
+                    "http://localhost:3000",
+                    "http://localhost:5173",
+                    "https://www.deckster.xyz",
+                    "https://deckster.xyz"
+                ]
+            # Try JSON first for backward compatibility
+            if v.startswith('['):
+                try:
+                    import json
+                    return json.loads(v)
+                except:
+                    pass
+            # Parse comma-separated and clean up any semicolons Railway might add
+            origins = []
+            for origin in v.split(","):
+                # Remove semicolons and whitespace
+                cleaned = origin.strip().rstrip(';')
+                if cleaned:
+                    origins.append(cleaned)
+            return origins if origins else [
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "https://www.deckster.xyz",
+                "https://deckster.xyz"
+            ]
+        return v
+    
     
     @field_validator("allowed_file_extensions", mode="before")
     def parse_file_extensions(cls, v):
@@ -152,7 +186,7 @@ class Settings(BaseSettings):
             return [model.strip() for model in v.split(",") if model.strip()]
         return v
     
-    @field_validator("allowed_file_extensions", "fallback_llm_models", mode="after")
+    @field_validator("cors_origins", "allowed_file_extensions", "fallback_llm_models", mode="after")
     def ensure_list_fields(cls, v):
         """Ensure these fields are always lists after processing."""
         if isinstance(v, str):

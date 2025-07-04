@@ -349,6 +349,35 @@ if settings.is_development:
         return {"message": "Cache cleared"}
 
 
+# Authentication endpoints (available in all environments)
+@app.post("/api/auth/demo")
+async def create_demo_token(request: Request):
+    """
+    Create a demo token for testing WebSocket connectivity.
+    Available in all environments for frontend testing.
+    """
+    # Get user_id from request body
+    try:
+        body = await request.json()
+        user_id = body.get("user_id", "demo_user")
+    except:
+        user_id = "demo_user"
+    
+    # Create token with demo user
+    token = create_test_token(user_id=user_id)
+    
+    # Log demo token creation
+    logger.info(f"Demo token created for user: {user_id}")
+    
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user_id,
+        "expires_in": 86400,  # 24 hours
+        "note": "Demo token for testing WebSocket connectivity"
+    }
+
+
 # Background tasks
 async def cleanup_expired_sessions():
     """Background task to cleanup expired sessions."""

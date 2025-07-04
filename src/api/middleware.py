@@ -47,6 +47,8 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/health",
             "/api/health/cors",
             "/api/health/test-logging",
+            "/api/dev/token",  # Allow unauthenticated access to dev token endpoint
+            "/api/auth/demo",  # Demo authentication endpoint for all environments
             "/docs",
             "/openapi.json",
             "/favicon.ico"
