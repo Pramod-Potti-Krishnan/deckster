@@ -213,6 +213,9 @@ class WebSocketHandler:
         )
         
         try:
+            # Inject session_id into the raw message before validation
+            raw_message['session_id'] = self.session_id
+            
             # Validate message structure
             message = validate_message(raw_message)
             
@@ -277,19 +280,7 @@ class WebSocketHandler:
                 session_id=self.session_id
             )
             
-            # ROUND 24 TEMPORARY: Direct greeting response for testing
-            text_lower = text.lower().strip()
-            if text_lower in ["hi", "hello", "hey"]:
-                api_logger.info(f"🔍 ROUND 24: Direct greeting response for '{text}'")
-                await self._send_chat_message(
-                    message_type="info",
-                    content={
-                        "message": "Hello! I'm currently in diagnostic mode. The main workflow is being debugged.",
-                        "context": "greeting_fallback",
-                        "debug": {"mode": "direct_response", "workflow_bypassed": True}
-                    }
-                )
-                return
+            # Removed ROUND 24 temporary bypass - let all messages go through the workflow
             
             # Check for test messages
             if text.lower().startswith("test:"):
@@ -316,9 +307,15 @@ class WebSocketHandler:
             
             # Check if workflow runner is available
             if not self.workflow_runner:
-                await self._send_error(
-                    "Presentation generation system is currently unavailable",
-                    code="WORKFLOW_UNAVAILABLE"
+                # User requested simple message when AI isn't working
+                await self._send_chat_message(
+                    message_type="error",
+                    content={
+                        "message": "Sorry, We're still working on the AI Agent",
+                        "context": "AI presentation generation is temporarily unavailable",
+                        "options": None,
+                        "question_id": None
+                    }
                 )
                 return
             
@@ -341,15 +338,68 @@ class WebSocketHandler:
                 workflow_runner_type=type(self.workflow_runner).__name__
             )
             
-            # ROUND 24: Wrap workflow execution with detailed error handling
+            # ROUND 24: Stream workflow updates
             try:
-                api_logger.info(f"🔍 ROUND 24: Attempting to start workflow")
-                self.workflow_state = await self.workflow_runner.start_generation(
-                    user_input=user_input,
-                    session_id=self.session_id,
-                    user_id=self.token_data.user_id
-                )
-                api_logger.info(f"🔍 ROUND 24: Workflow started successfully")
+                api_logger.info(f"🔍 ROUND 24: Starting workflow stream")
+                
+                # Create initial state
+                initial_state = {
+                    "request_id": f"req_{uuid4().hex[:12]}",
+                    "session_id": self.session_id,
+                    "user_id": self.token_data.user_id,
+                    "correlation_id": f"corr_{uuid4().hex[:12]}",
+                    "user_input": user_input,
+                    "presentation_request": None,
+                    "clarification_rounds": [],
+                    "clarification_responses": [],
+                    "requirement_analysis": None,
+                    "presentation_structure": None,
+                    "layouts": None,
+                    "research_findings": None,
+                    "visual_assets": None,
+                    "chart_data": None,
+                    "diagrams": None,
+                    "slides_data": None,
+                    "final_presentation": None,
+                    "current_phase": "analysis",
+                    "needs_clarification": False,
+                    "agent_outputs": {},
+                    "agent_errors": {},
+                    "created_at": datetime.utcnow(),
+                    "updated_at": datetime.utcnow(),
+                    "processing_time_ms": 0
+                }
+                
+                # Stream workflow updates
+                async for state in self.workflow_runner.workflow.astream(initial_state):
+                    api_logger.info(
+                        f"🔍 ROUND 24: Workflow state update",
+                        phase=state.get("current_phase"),
+                        session_id=self.session_id
+                    )
+                    
+                    # Update our state
+                    self.workflow_state = state
+                    
+                    # ROUND 24 FIX: Log the actual state structure
+                    api_logger.info(
+                        f"🔍 ROUND 24 FIX: Workflow state structure",
+                        session_id=self.session_id,
+                        state_keys=list(state.keys()) if isinstance(state, dict) else "Not a dict",
+                        current_phase=state.get("current_phase") if isinstance(state, dict) else "N/A",
+                        state_type=type(state).__name__
+                    )
+                    
+                    # Handle the updated state immediately
+                    await self._handle_workflow_state()
+                    
+                    # If we need clarification, break the loop
+                    if state.get("needs_clarification"):
+                        api_logger.info(f"🔍 ROUND 24: Breaking for clarification")
+                        break
+                
+                api_logger.info(f"🔍 ROUND 24: Workflow stream completed")
+                
             except Exception as workflow_error:
                 api_logger.error(
                     f"❌ ROUND 24: Workflow execution failed",
@@ -374,17 +424,6 @@ class WebSocketHandler:
                     }
                 )
                 return
-            
-            # Debug logging after workflow returns
-            api_logger.debug(
-                f"Workflow returned state: phase={self.workflow_state.get('current_phase') if self.workflow_state else 'None'}",
-                session_id=self.session_id,
-                has_workflow_state=self.workflow_state is not None,
-                workflow_state_keys=list(self.workflow_state.keys()) if self.workflow_state else []
-            )
-            
-            # Handle workflow result
-            await self._handle_workflow_state()
         
         except Exception as e:
             # Enhanced error logging
@@ -451,7 +490,29 @@ class WebSocketHandler:
             api_logger.warning("No workflow state to handle")
             return
         
-        phase = self.workflow_state.get("current_phase")
+        # ROUND 24 FIX: Handle both dict state and node output formats
+        if isinstance(self.workflow_state, dict):
+            # Check if this is a LangGraph node output (has node name as key)
+            if len(self.workflow_state) == 1 and list(self.workflow_state.keys())[0] in ['analyze', 'clarify', 'structure', 'generate', 'assemble']:
+                # This is a node output, extract the actual state
+                node_name = list(self.workflow_state.keys())[0]
+                node_state = self.workflow_state[node_name]
+                api_logger.info(
+                    f"🔍 ROUND 24 FIX: Extracted node state from '{node_name}'",
+                    session_id=self.session_id,
+                    node_state_keys=list(node_state.keys()) if isinstance(node_state, dict) else "Not a dict"
+                )
+                # Use the node state for phase detection
+                phase = node_state.get("current_phase") if isinstance(node_state, dict) else None
+                # Also update our workflow_state to use the extracted state
+                if isinstance(node_state, dict):
+                    self.workflow_state = node_state
+            else:
+                # Regular state dict
+                phase = self.workflow_state.get("current_phase")
+        else:
+            phase = None
+            
         api_logger.info(
             f"Handling workflow state: phase={phase}, has_clarifications={bool(self.workflow_state.get('clarification_rounds'))}",
             session_id=self.session_id
@@ -490,13 +551,46 @@ class WebSocketHandler:
                 progress=self._create_progress_update("generation", 30)
             )
         
-        elif phase == "completed":
+        elif phase == "structure":
+            # Send structure progress update
+            api_logger.info(f"Handling structure phase", session_id=self.session_id)
+            await self._send_chat_message(
+                message_type="info",
+                content={
+                    "message": "Building presentation structure...",
+                    "context": "Creating slide layouts and design",
+                    "options": None,
+                    "question_id": None
+                },
+                progress=self._create_progress_update("generation", 50)
+            )
+        
+        elif phase == "complete" or phase == "completed":
             # Send final presentation
+            api_logger.info(f"Handling complete phase", session_id=self.session_id)
             presentation = self.workflow_state.get("final_presentation")
             if presentation:
-                await self._send_presentation(presentation)
+                # Mock presentation for testing
+                mock_presentation = Presentation(
+                    id=presentation.get("id", str(uuid4())),
+                    title=presentation.get("title", "Your Presentation"),
+                    description="Generated presentation",
+                    theme_config={},
+                    slides=[],
+                    metadata={},
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                await self._send_presentation(mock_presentation)
             else:
                 await self._send_error("Presentation generation failed")
+        
+        else:
+            api_logger.warning(
+                f"Unknown workflow phase: {phase}",
+                session_id=self.session_id,
+                workflow_state_keys=list(self.workflow_state.keys())
+            )
     
     async def _handle_test_message(self, text: str):
         """Handle test messages for debugging message structures."""
@@ -914,7 +1008,19 @@ async def websocket_endpoint(websocket: WebSocket):
         
         # Authenticate
         try:
-            token_data = await authenticate_websocket(websocket)
+            # Check if auth is disabled for local development
+            import os
+            if os.getenv("DISABLE_AUTH", "false").lower() == "true":
+                # Create fake token data for local testing
+                from ..utils.auth import TokenData
+                token_data = TokenData(
+                    user_id="local_test_user",
+                    email="test@localhost",
+                    session_id=f"local_session_{uuid4().hex[:8]}"
+                )
+                api_logger.info("Auth bypassed for local development (DISABLE_AUTH=true)")
+            else:
+                token_data = await authenticate_websocket(websocket)
         except Exception as e:
             api_logger.error(f"WebSocket authentication failed: {e}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

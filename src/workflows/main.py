@@ -19,107 +19,25 @@ logger.info(f"🔍 Python executable: {sys.executable}")
 # Make langgraph optional with comprehensive debugging
 LANGGRAPH_AVAILABLE = False
 try:
-    logger.info("🔍 Attempting to import langgraph module...")
-    import langgraph
-    logger.info(f"✅ langgraph module found at: {langgraph.__file__}")
-    logger.info(f"✅ langgraph version: {getattr(langgraph, '__version__', 'unknown')}")
-    logger.info(f"✅ Available in langgraph module: {dir(langgraph)[:10]}...")  # First 10 items
+    logger.info("🔍 Attempting to import langgraph components...")
     
-    # Try different import paths - check what's available in the module first
-    try:
-        logger.info("🔍 Inspecting langgraph module contents...")
-        
-        # List all available attributes in the module
-        available_attrs = dir(langgraph)
-        logger.info(f"✅ Available in langgraph: {available_attrs}")
-        
-        # Check for common patterns in the module
-        has_graph = 'graph' in available_attrs or 'Graph' in available_attrs
-        has_state_graph = 'StateGraph' in available_attrs or 'state_graph' in available_attrs
-        
-        logger.info(f"🔍 Module inspection: has_graph={has_graph}, has_state_graph={has_state_graph}")
-        
-        # Try to find StateGraph in different ways
-        StateGraph = None
-        END = None
-        
-        # Method 1: Direct attribute access
-        if hasattr(langgraph, 'StateGraph'):
-            StateGraph = langgraph.StateGraph
-            logger.info("✅ Found StateGraph as direct attribute")
-        
-        # Method 2: Check for graph submodule
-        if StateGraph is None and hasattr(langgraph, 'graph'):
-            logger.info("🔍 Found 'graph' submodule, checking contents...")
-            graph_attrs = dir(langgraph.graph)
-            logger.info(f"   Available in langgraph.graph: {graph_attrs[:20]}...")
+    # Import StateGraph and END from the correct location
+    from langgraph.graph import StateGraph, END
+    
+    logger.info("✅ Successfully imported StateGraph and END from langgraph.graph")
+    LANGGRAPH_AVAILABLE = True
+    
+    # Define other classes as needed (these might not be used but kept for compatibility)
+    class ToolExecutor: pass
+    class ToolInvocation: pass
+    Graph = StateGraph
             
-            if hasattr(langgraph.graph, 'StateGraph'):
-                StateGraph = langgraph.graph.StateGraph
-                logger.info("✅ Found StateGraph in graph submodule")
-        
-        # Method 3: Try common import patterns for newer versions
-        if StateGraph is None:
-            try:
-                # Some versions might use this pattern
-                from langgraph.graph.state import StateGraph as SG
-                StateGraph = SG
-                logger.info("✅ Found StateGraph via langgraph.graph.state import")
-            except ImportError:
-                pass
-        
-        # Method 4: Check if it's a function that creates graphs
-        if StateGraph is None:
-            for attr_name in ['create_graph', 'make_graph', 'Graph', 'graph']:
-                if hasattr(langgraph, attr_name):
-                    potential_graph = getattr(langgraph, attr_name)
-                    logger.info(f"🔍 Found '{attr_name}' - type: {type(potential_graph).__name__}")
-                    if callable(potential_graph) and StateGraph is None:
-                        StateGraph = potential_graph
-                        logger.info(f"✅ Using '{attr_name}' as StateGraph alternative")
-                        break
-        
-        # Look for END constant
-        if hasattr(langgraph, 'END'):
-            END = langgraph.END
-            logger.info("✅ Found END constant")
-        elif hasattr(langgraph, 'constants'):
-            if hasattr(langgraph.constants, 'END'):
-                END = langgraph.constants.END
-                logger.info("✅ Found END in constants submodule")
-        
-        if END is None:
-            END = "END"
-            logger.warning("⚠️  Using string 'END' as fallback")
-        
-        # Set availability based on what we found
-        if StateGraph is not None:
-            LANGGRAPH_AVAILABLE = True
-            logger.info(f"✅ LangGraph configured successfully with StateGraph type: {type(StateGraph).__name__}")
-            
-            # Define other classes as fallbacks
-            class ToolExecutor: pass
-            class ToolInvocation: pass
-            Graph = StateGraph
-        else:
-            raise ImportError("Could not find StateGraph in any expected location")
-            
-    except ImportError as e1:
-        logger.error(f"❌ Failed to properly import from langgraph: {e1}")
-        logger.error(f"   This indicates langgraph may not be properly installed or has a different API")
-        
-        # Define all fallback classes
-        LANGGRAPH_AVAILABLE = False
-        END = "END"
-        class StateGraph: pass
-        class ToolExecutor: pass
-        class ToolInvocation: pass
-        class Graph: pass
-            
-except Exception as e:
-    logger.error(f"❌ Critical error importing langgraph: {type(e).__name__}: {e}")
+except ImportError as e:
+    logger.error(f"❌ Failed to import from langgraph: {e}")
     logger.error(f"   This will prevent real AI functionality from working!")
+    
     # Define fallback classes
+    LANGGRAPH_AVAILABLE = False
     END = "END"
     class StateGraph: pass
     class ToolExecutor: pass
@@ -235,8 +153,32 @@ async def analyze_request(state: WorkflowState) -> Dict[str, Any]:
         clarification_questions_type=type(result.clarification_questions).__name__ if result and result.clarification_questions is not None else "None"
     )
     
-    # Update state based on result
+    # ROUND 24 FIX: Create complete state update that preserves all required fields
     updates = {
+        # Core workflow fields that must be preserved
+        "request_id": state["request_id"],
+        "session_id": state["session_id"], 
+        "user_id": state["user_id"],
+        "correlation_id": state["correlation_id"],
+        "user_input": state["user_input"],
+        "presentation_request": state.get("presentation_request"),
+        "clarification_rounds": state.get("clarification_rounds", []),
+        "clarification_responses": state.get("clarification_responses", []),
+        "presentation_structure": state.get("presentation_structure"),
+        "layouts": state.get("layouts"),
+        "research_findings": state.get("research_findings"),
+        "visual_assets": state.get("visual_assets"),
+        "charts": state.get("charts"),
+        "diagrams": state.get("diagrams"),
+        "final_presentation": state.get("final_presentation"),
+        "needs_clarification": state.get("needs_clarification", False),
+        "active_agents": state.get("active_agents", []),
+        "completed_agents": state.get("completed_agents", []),
+        "agent_errors": state.get("agent_errors", {}),
+        "created_at": state["created_at"],
+        "processing_time_ms": state.get("processing_time_ms", 0),
+        
+        # Updated fields
         "requirement_analysis": result.analysis.model_dump(mode='json') if result.analysis else None,
         "updated_at": datetime.utcnow()
     }
@@ -258,6 +200,15 @@ async def analyze_request(state: WorkflowState) -> Dict[str, Any]:
         updates["current_phase"] = "generation"
         updates["presentation_structure"] = result.initial_structure
         updates["active_agents"] = result.next_agents
+    
+    # Debug logging to verify current_phase is set
+    logger.info(
+        f"🔍 ROUND 24 FIX: analyze_request returning updates",
+        session_id=state["session_id"],
+        current_phase=updates["current_phase"],
+        output_type=result.output_type,
+        updates_keys=list(updates.keys())
+    )
     
     return updates
 
@@ -531,7 +482,7 @@ class MockWorkflow:
         return True
     
     async def astream(self, state: WorkflowState, config=None):
-        """Mock async stream that just runs analyze_request."""
+        """Mock async stream that runs the full workflow."""
         # ROUND 24: Enhanced logging
         logger.info(
             f"🔍 ROUND 24: MockWorkflow.astream starting",
@@ -549,9 +500,9 @@ class MockWorkflow:
             state_keys=list(state.keys())
         )
         
-        # Just run the analyze step for Phase 1
+        # Step 1: Analyze request
         try:
-            logger.info(f"🔍 ROUND 24: MockWorkflow calling analyze_request")
+            logger.info(f"🔍 ROUND 24: MockWorkflow Step 1 - calling analyze_request")
             updates = await analyze_request(state)
             
             # Debug logging for updates
@@ -565,6 +516,50 @@ class MockWorkflow:
             
             state.update(updates)
             yield state
+            
+            # Check if we need clarification or should continue
+            if state.get("needs_clarification"):
+                logger.info(f"🔍 ROUND 24: MockWorkflow stopping for clarification")
+                return  # Stop here and wait for user response
+            
+            # Step 2: Create structure (mock for now)
+            logger.info(f"🔍 ROUND 24: MockWorkflow Step 2 - creating structure")
+            await asyncio.sleep(1)  # Simulate processing
+            state.update({
+                "current_phase": "structure",
+                "presentation_structure": {
+                    "title": "Your Presentation",
+                    "slides": [{"id": 1, "title": "Title Slide"}]
+                },
+                "updated_at": datetime.utcnow()
+            })
+            yield state
+            
+            # Step 3: Generate content (mock for now)
+            logger.info(f"🔍 ROUND 24: MockWorkflow Step 3 - generating content")
+            await asyncio.sleep(1)  # Simulate processing
+            state.update({
+                "current_phase": "generation",
+                "slides_data": [{"id": 1, "content": "Generated content"}],
+                "updated_at": datetime.utcnow()
+            })
+            yield state
+            
+            # Step 4: Assemble presentation
+            logger.info(f"🔍 ROUND 24: MockWorkflow Step 4 - assembling presentation")
+            await asyncio.sleep(1)  # Simulate processing
+            state.update({
+                "current_phase": "complete",
+                "final_presentation": {
+                    "id": str(uuid4()),
+                    "title": "Your Presentation",
+                    "created_at": datetime.utcnow().isoformat()
+                },
+                "updated_at": datetime.utcnow()
+            })
+            yield state
+            
+            logger.info(f"✅ ROUND 24: MockWorkflow completed successfully")
         except Exception as e:
             # ROUND 24: Enhanced error logging
             logger.error(
