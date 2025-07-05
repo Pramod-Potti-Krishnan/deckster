@@ -61,10 +61,11 @@ class ClarificationQuestion(BaseModel):
 class DirectorInboundOutput(AgentOutput):
     """Output from Director (Inbound) agent."""
     agent_id: Literal["director_inbound"] = "director_inbound"
-    output_type: Literal["analysis", "clarification", "structure"] = "analysis"
+    output_type: Literal["analysis", "clarification", "structure", "greeting"] = "analysis"
     analysis: Optional[RequirementAnalysis] = None
     clarification_questions: Optional[List[ClarificationQuestion]] = None
     initial_structure: Optional[Dict[str, Any]] = None  # Simplified structure
+    greeting_response: Optional[Dict[str, Any]] = None  # Greeting message and suggestions
     next_agents: List[str] = Field(default_factory=list)  # Agents to activate next
 
 

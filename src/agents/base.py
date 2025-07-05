@@ -100,23 +100,49 @@ class BaseAgent(ABC):
     def _init_pydantic_agent(self):
         """Initialize the Pydantic AI agent."""
         if PYDANTIC_AI_AVAILABLE:
-            # Create fallback model configuration
-            models = [self.config.model_primary] + self.config.model_fallbacks
-            fallback_model = FallbackModel(*models)
-            
-            # Load system prompt
-            system_prompt = self._load_system_prompt()
-            
-            # Create agent
-            self.ai_agent = Agent(
-                name=self.agent_id,
-                model=fallback_model,
-                system_prompt=system_prompt,
-                result_type=self.get_output_type(),
-                retries=self.config.max_retries
-            )
+            try:
+                # Create fallback model configuration
+                models = [self.config.model_primary] + self.config.model_fallbacks
+                agent_logger.info(
+                    f"Initializing pydantic_ai agent for {self.agent_id}",
+                    primary_model=self.config.model_primary,
+                    fallback_models=self.config.model_fallbacks,
+                    pydantic_ai_available=True
+                )
+                
+                fallback_model = FallbackModel(*models)
+                
+                # Load system prompt
+                system_prompt = self._load_system_prompt()
+                
+                # Create agent
+                self.ai_agent = Agent(
+                    name=self.agent_id,
+                    model=fallback_model,
+                    system_prompt=system_prompt,
+                    result_type=self.get_output_type(),
+                    retries=self.config.max_retries
+                )
+                
+                agent_logger.info(
+                    f"✅ Successfully initialized pydantic_ai agent for {self.agent_id}",
+                    agent_type=type(self.ai_agent).__name__,
+                    models_configured=len(models)
+                )
+            except Exception as e:
+                agent_logger.error(
+                    f"Failed to initialize pydantic_ai agent for {self.agent_id}",
+                    error=str(e),
+                    error_type=type(e).__name__
+                )
+                self.ai_agent = None
+                self.system_prompt = self._load_system_prompt()
         else:
             # Fallback: Store config for direct API calls
+            agent_logger.warning(
+                f"⚠️  pydantic_ai not available for {self.agent_id} - using mock mode",
+                pydantic_ai_available=False
+            )
             self.system_prompt = self._load_system_prompt()
             self.ai_agent = None
     
@@ -290,10 +316,12 @@ class BaseAgent(ABC):
         try:
             # Check if pydantic_ai is available and ai_agent is initialized
             if not PYDANTIC_AI_AVAILABLE or self.ai_agent is None:
-                # Return a mock response for Phase 1
-                agent_logger.info(
-                    "Using mock LLM response (pydantic_ai not available or agent not initialized)",
-                    agent_id=self.agent_id
+                # Return a mock response when pydantic_ai is not available
+                agent_logger.warning(
+                    "Using mock LLM response - pydantic_ai not available. Install pydantic-ai for real AI functionality.",
+                    agent_id=self.agent_id,
+                    pydantic_ai_available=PYDANTIC_AI_AVAILABLE,
+                    ai_agent_initialized=self.ai_agent is not None
                 )
                 
                 # Log mock LLM call
@@ -312,6 +340,12 @@ class BaseAgent(ABC):
             
             # Create run context
             run_context = RunContext(deps=context)
+            
+            agent_logger.info(
+                f"🤖 Running REAL AI with pydantic_ai for {self.agent_id}",
+                model=self.config.model_primary,
+                prompt_preview=prompt[:100] + "..." if len(prompt) > 100 else prompt
+            )
             
             # Run agent
             result = await self.ai_agent.run(
@@ -333,6 +367,12 @@ class BaseAgent(ABC):
                     latency_ms=latency_ms,
                     temperature=temperature or self.config.temperature
                 )
+            
+            agent_logger.info(
+                f"✅ Real AI response received for {self.agent_id}",
+                latency_ms=latency_ms,
+                result_type=type(result).__name__
+            )
             
             return result
             
@@ -547,9 +587,9 @@ class BaseAgent(ABC):
             
             if result is None:
                 # RLS policy prevented save, but workflow continues
-                logger.debug(f"Agent output save blocked by RLS policy for {self.agent_id}, continuing normally")
+                agent_logger.debug(f"Agent output save blocked by RLS policy for {self.agent_id}, continuing normally")
             else:
-                logger.debug(f"Agent output saved successfully for {self.agent_id}")
+                agent_logger.debug(f"Agent output saved successfully for {self.agent_id}")
                 
         except Exception as e:
             # Handle any other exceptions that weren't caught by save_agent_output

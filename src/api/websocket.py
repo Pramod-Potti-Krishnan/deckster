@@ -407,7 +407,20 @@ class WebSocketHandler:
             session_id=self.session_id
         )
         
-        if phase == "clarification":
+        if phase == "greeting":
+            # Send greeting response
+            greeting_resp = self.workflow_state.get("greeting_response", {})
+            await self._send_chat_message(
+                message_type="info",
+                content={
+                    "message": greeting_resp.get("message", "Hello! How can I help you create a presentation today?"),
+                    "context": "greeting",
+                    "options": greeting_resp.get("suggestions", []),
+                    "question_id": None
+                }
+            )
+        
+        elif phase == "clarification":
             # Send clarification questions
             rounds = self.workflow_state.get("clarification_rounds", [])
             if rounds:
@@ -695,12 +708,18 @@ class WebSocketHandler:
                 "required": q.required
             })
         
+        # Extract first question text as main message
+        first_question_text = clarification_round.questions[0].question if clarification_round.questions else "Please provide more information"
+        
         await self._send_chat_message(
             message_type="question",
             content={
+                "message": first_question_text,
+                "context": clarification_round.context or "I need some additional information to create the best presentation for you",
+                "options": None,
+                "question_id": clarification_round.questions[0].question_id if clarification_round.questions else None,
                 "round_id": clarification_round.round_id,
-                "questions": questions_data,
-                "context": clarification_round.context
+                "questions": questions_data
             },
             actions=[{
                 "action_id": "submit_answers",

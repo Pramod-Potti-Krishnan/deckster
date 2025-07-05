@@ -160,6 +160,36 @@ Output structured JSON responses according to the defined schemas."""
             )
             # Continue but with caution
         
+        # Check for greeting patterns
+        user_text = user_input.get("text", "").lower().strip()
+        greeting_patterns = ["hi", "hello", "hey", "good morning", "good afternoon", 
+                           "good evening", "greetings", "howdy", "yo", "hiya", "hi there", "hello there"]
+        
+        is_greeting = any(user_text.startswith(pattern) or user_text == pattern for pattern in greeting_patterns)
+        
+        if is_greeting:
+            # Return greeting response
+            return DirectorInboundOutput(
+                agent_id=self.agent_id,
+                output_type="greeting",
+                timestamp=datetime.utcnow(),
+                session_id=context.session_id,
+                correlation_id=context.correlation_id,
+                status="completed",
+                confidence_score=1.0,
+                greeting_response={
+                    "message": "Hello! I'm Deckster, your AI presentation assistant. 🎯\n\nI can help you create professional presentations on any topic. Just tell me what you'd like to present about, and I'll guide you through creating something amazing!\n\nWhat topic would you like to explore?",
+                    "suggestions": [
+                        "Business presentation",
+                        "Educational content", 
+                        "Technical overview",
+                        "Sales pitch",
+                        "Project update"
+                    ]
+                },
+                metadata={"is_greeting": True}
+            )
+        
         # Check cache for similar requests
         cache_key = f"analysis:{hash(user_input.get('text', ''))}"
         cached_analysis = await self.get_cached_result(cache_key)

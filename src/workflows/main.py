@@ -15,8 +15,10 @@ try:
     from langgraph.prebuilt import ToolExecutor, ToolInvocation
     from langgraph.graph import Graph
     LANGGRAPH_AVAILABLE = True
-except ImportError:
+    logger.info("✅ LangGraph successfully imported - Full workflow orchestration available")
+except ImportError as e:
     LANGGRAPH_AVAILABLE = False
+    logger.warning(f"⚠️  LangGraph import failed: {e} - Using simplified workflow")
     # Define fallback constants
     END = "END"
     class StateGraph: pass
@@ -138,7 +140,12 @@ async def analyze_request(state: WorkflowState) -> Dict[str, Any]:
         "updated_at": datetime.utcnow()
     }
     
-    if result.output_type == "clarification":
+    if result.output_type == "greeting":
+        # Handle greeting response - just store it, don't change phase
+        updates["needs_clarification"] = False
+        updates["current_phase"] = "greeting"
+        updates["greeting_response"] = result.greeting_response
+    elif result.output_type == "clarification":
         updates["needs_clarification"] = True
         updates["current_phase"] = "clarification"
         if result.clarification_questions:
@@ -509,8 +516,14 @@ class MockWorkflow:
 def create_workflow() -> Graph:
     """Create the main workflow graph."""
     if not LANGGRAPH_AVAILABLE:
-        # Return a mock workflow for Phase 1
+        logger.warning(
+            "LangGraph not available - using MockWorkflow. Install langgraph for full functionality.",
+            langgraph_available=LANGGRAPH_AVAILABLE
+        )
+        # Return a mock workflow when LangGraph is not installed
         return MockWorkflow()
+    
+    logger.info("🚀 Creating REAL LangGraph workflow with full orchestration")
     
     # Initialize workflow
     workflow = StateGraph(WorkflowState)
@@ -522,6 +535,8 @@ def create_workflow() -> Graph:
     workflow.add_node("structure", create_structure)
     workflow.add_node("generate", run_parallel_agents)
     workflow.add_node("assemble", assemble_presentation)
+    
+    logger.info("✅ Added all workflow nodes successfully")
     
     # Add edges
     workflow.set_entry_point("analyze")
@@ -545,8 +560,13 @@ def create_workflow() -> Graph:
     workflow.add_edge("generate", "assemble")
     workflow.add_edge("assemble", END)
     
+    logger.info("✅ Configured all workflow edges and conditions")
+    
     # Compile workflow
-    return workflow.compile()
+    compiled = workflow.compile()
+    logger.info(f"✅ Successfully compiled LangGraph workflow: {type(compiled).__name__}")
+    
+    return compiled
 
 
 # Workflow runner

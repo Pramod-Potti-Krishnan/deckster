@@ -49,6 +49,52 @@ async def lifespan(app: FastAPI):
     logger.info(f"Development mode: {settings.is_development}")
     logger.info(f"Dev token endpoint available: {settings.is_development}")
     
+    # Check critical dependencies
+    try:
+        import pydantic_ai
+        logger.info("✅ pydantic_ai is available - Real AI functionality enabled")
+    except ImportError:
+        logger.warning("⚠️  pydantic_ai NOT available - System will use mock responses. Install pydantic-ai for real AI.")
+    
+    try:
+        import langgraph
+        logger.info("✅ langgraph is available - Full workflow orchestration enabled")
+    except ImportError:
+        logger.warning("⚠️  langgraph NOT available - System will use simplified workflow. Install langgraph for full functionality.")
+    
+    # Check LLM API keys
+    if settings.openai_api_key:
+        logger.info("✅ OpenAI API key configured")
+    else:
+        logger.warning("⚠️  OpenAI API key NOT configured")
+        
+    if settings.anthropic_api_key:
+        logger.info("✅ Anthropic API key configured")
+    else:
+        logger.warning("⚠️  Anthropic API key NOT configured")
+    
+    if not (settings.openai_api_key or settings.anthropic_api_key):
+        logger.error("❌ No LLM API keys configured! System will not function properly.")
+    
+    # Check Logfire
+    if settings.logfire_token:
+        logger.info("✅ Logfire token configured")
+        try:
+            import logfire
+            logger.info("✅ Logfire module available - Enhanced observability enabled")
+        except ImportError:
+            logger.warning("⚠️  Logfire module NOT available but token configured")
+    else:
+        logger.info("ℹ️  Logfire not configured (optional)")
+    
+    # Check Pydantic
+    try:
+        import pydantic
+        from pydantic import BaseModel
+        logger.info(f"✅ Pydantic available - Version: {pydantic.VERSION}")
+    except ImportError:
+        logger.error("❌ Pydantic NOT available - Core functionality broken!")
+    
     try:
         # Initialize Redis connection
         redis = await get_redis()
