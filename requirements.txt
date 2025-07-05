@@ -27,8 +27,8 @@ openai==1.93.0
 anthropic==0.57.1
 
 # Workflow orchestration - CRITICAL
-langgraph==0.5.1
-langgraph-checkpoint==2.1.0
+langgraph
+langgraph-checkpoint
 
 # Essential utilities
 python-dotenv==1.1.1

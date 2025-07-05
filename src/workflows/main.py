@@ -9,6 +9,8 @@ import operator
 import asyncio
 from uuid import uuid4
 
+from ..utils.logger import logger, set_request_id, set_session_id
+
 # Make langgraph optional
 try:
     from langgraph import StateGraph, END
@@ -33,7 +35,6 @@ from ..models.messages import (
 from ..models.presentation import Presentation
 from ..models.agents import WorkflowState as WorkflowStateModel, AgentTaskStatus
 from ..agents.director_in import DirectorInboundAgent
-from ..utils.logger import logger, set_request_id, set_session_id
 
 
 # State definition
