@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 # Base message types
 class BaseMessage(BaseModel):
     """Base model for all messages in the system."""
-    message_id: str = Field(default_factory=lambda: f"msg_{uuid4().hex[:12]}")
+    id: str = Field(default_factory=lambda: f"msg_{uuid4().hex[:12]}")  # Changed from message_id to id for frontend compatibility
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     session_id: str
     

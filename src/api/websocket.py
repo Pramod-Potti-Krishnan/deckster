@@ -252,6 +252,15 @@ class WebSocketHandler:
         # Validate input
         text = message.data.get("text", "")
         
+        # ROUND 24 DEBUG: Log immediately when user input received
+        api_logger.info(
+            f"🔍 ROUND 24 DEBUG: Received user input",
+            text=text,
+            session_id=self.session_id,
+            has_workflow_runner=self.workflow_runner is not None,
+            workflow_runner_type=type(self.workflow_runner).__name__ if self.workflow_runner else "None"
+        )
+        
         try:
             # Security validation
             validated_text = validate_text_input(text)
@@ -267,6 +276,20 @@ class WebSocketHandler:
                 f"Processing user input: text='{text[:50]}...', has_response_to={bool(message.data.get('response_to'))}",
                 session_id=self.session_id
             )
+            
+            # ROUND 24 TEMPORARY: Direct greeting response for testing
+            text_lower = text.lower().strip()
+            if text_lower in ["hi", "hello", "hey"]:
+                api_logger.info(f"🔍 ROUND 24: Direct greeting response for '{text}'")
+                await self._send_chat_message(
+                    message_type="info",
+                    content={
+                        "message": "Hello! I'm currently in diagnostic mode. The main workflow is being debugged.",
+                        "context": "greeting_fallback",
+                        "debug": {"mode": "direct_response", "workflow_bypassed": True}
+                    }
+                )
+                return
             
             # Check for test messages
             if text.lower().startswith("test:"):
@@ -318,12 +341,39 @@ class WebSocketHandler:
                 workflow_runner_type=type(self.workflow_runner).__name__
             )
             
-            # Start workflow
-            self.workflow_state = await self.workflow_runner.start_generation(
-                user_input=user_input,
-                session_id=self.session_id,
-                user_id=self.token_data.user_id
-            )
+            # ROUND 24: Wrap workflow execution with detailed error handling
+            try:
+                api_logger.info(f"🔍 ROUND 24: Attempting to start workflow")
+                self.workflow_state = await self.workflow_runner.start_generation(
+                    user_input=user_input,
+                    session_id=self.session_id,
+                    user_id=self.token_data.user_id
+                )
+                api_logger.info(f"🔍 ROUND 24: Workflow started successfully")
+            except Exception as workflow_error:
+                api_logger.error(
+                    f"❌ ROUND 24: Workflow execution failed",
+                    error_type=type(workflow_error).__name__,
+                    error_message=str(workflow_error),
+                    workflow_type=type(self.workflow_runner).__name__,
+                    session_id=self.session_id,
+                    exc_info=True  # Full traceback
+                )
+                
+                # Send detailed error to frontend
+                await self._send_chat_message(
+                    message_type="error",
+                    content={
+                        "message": f"Workflow error: {type(workflow_error).__name__}",
+                        "error": str(workflow_error),
+                        "debug_info": {
+                            "workflow_type": type(self.workflow_runner).__name__,
+                            "error_type": type(workflow_error).__name__,
+                            "round": "24"
+                        }
+                    }
+                )
+                return
             
             # Debug logging after workflow returns
             api_logger.debug(

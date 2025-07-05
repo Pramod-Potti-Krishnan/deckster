@@ -532,11 +532,13 @@ class MockWorkflow:
     
     async def astream(self, state: WorkflowState, config=None):
         """Mock async stream that just runs analyze_request."""
+        # ROUND 24: Enhanced logging
         logger.info(
-            "Running mock workflow (LangGraph not available)",
+            f"🔍 ROUND 24: MockWorkflow.astream starting",
             session_id=state.get("session_id"),
             request_id=state.get("request_id"),
-            current_phase=state.get("current_phase")
+            current_phase=state.get("current_phase"),
+            has_user_input=state.get("user_input") is not None
         )
         
         # Debug logging for initial state
@@ -549,7 +551,7 @@ class MockWorkflow:
         
         # Just run the analyze step for Phase 1
         try:
-            logger.debug("MockWorkflow calling analyze_request")
+            logger.info(f"🔍 ROUND 24: MockWorkflow calling analyze_request")
             updates = await analyze_request(state)
             
             # Debug logging for updates
@@ -564,12 +566,14 @@ class MockWorkflow:
             state.update(updates)
             yield state
         except Exception as e:
+            # ROUND 24: Enhanced error logging
             logger.error(
-                f"Mock workflow error: {type(e).__name__}: {str(e)}",
+                f"❌ ROUND 24: MockWorkflow error in analyze_request",
                 session_id=state.get("session_id"),
                 error_type=type(e).__name__,
                 error_message=str(e),
                 current_phase=state.get("current_phase", "unknown"),
+                state_keys=list(state.keys()),
                 exc_info=True
             )
             
@@ -675,7 +679,14 @@ class WorkflowRunner:
     """Helper class to run the workflow."""
     
     def __init__(self):
+        # ROUND 24: Log initialization details
+        logger.info(f"🔍 ROUND 24: WorkflowRunner init")
+        logger.info(f"   LANGGRAPH_AVAILABLE at init: {LANGGRAPH_AVAILABLE}")
+        
         self.workflow = create_workflow()
+        
+        logger.info(f"   Workflow type: {type(self.workflow).__name__}")
+        logger.info(f"   Is MockWorkflow: {isinstance(self.workflow, MockWorkflow)}")
     
     async def start_generation(
         self,
@@ -684,6 +695,11 @@ class WorkflowRunner:
         user_id: str
     ) -> WorkflowState:
         """Start a new presentation generation workflow."""
+        # ROUND 24: Log runtime state
+        logger.info(f"🔍 ROUND 24: start_generation called")
+        logger.info(f"   LANGGRAPH_AVAILABLE at runtime: {LANGGRAPH_AVAILABLE}")
+        logger.info(f"   Workflow is MockWorkflow: {isinstance(self.workflow, MockWorkflow)}")
+        logger.info(f"   Workflow has astream: {hasattr(self.workflow, 'astream')}")
         # Create initial state
         initial_state: WorkflowState = {
             "request_id": f"req_{uuid4().hex[:12]}",

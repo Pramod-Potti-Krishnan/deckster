@@ -23,7 +23,8 @@
       "Bash(git push:*)",
       "WebFetch(domain:deckster-production.up.railway.app)",
       "Bash(curl:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(chmod:*)"
     ],
     "deny": []
   }
