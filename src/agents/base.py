@@ -13,14 +13,48 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+# Import logger first before using it
+from ..models.agents import AgentOutput, AgentMessage, AgentRequest, AgentResponse
+from ..utils.logger import agent_logger, log_agent_request, log_agent_response, log_llm_call, log_error
+from ..storage import get_redis, get_supabase
+
 # Make pydantic_ai optional
 PYDANTIC_AI_IMPORT_ERROR = None
 try:
     from pydantic_ai import Agent, RunContext
-    from pydantic_ai.models import ModelMessage, FallbackModel
     from pydantic_ai.exceptions import ModelRetry
+    
+    # Try different import patterns for models
+    FallbackModel = None
+    ModelMessage = None
+    
+    # Try importing from pydantic_ai.models
+    try:
+        from pydantic_ai.models import ModelMessage
+        agent_logger.debug("✅ Imported ModelMessage from pydantic_ai.models")
+    except ImportError:
+        agent_logger.debug("⚠️  ModelMessage not found in pydantic_ai.models")
+    
+    # Try importing FallbackModel - it might have a different name or location
+    try:
+        from pydantic_ai.models import FallbackModel
+        agent_logger.debug("✅ Imported FallbackModel from pydantic_ai.models")
+    except ImportError:
+        # Try alternative names
+        try:
+            from pydantic_ai.models import Model as FallbackModel
+            agent_logger.debug("✅ Using Model as FallbackModel")
+        except ImportError:
+            try:
+                from pydantic_ai import Model as FallbackModel
+                agent_logger.debug("✅ Using pydantic_ai.Model as FallbackModel")
+            except ImportError:
+                agent_logger.warning("⚠️  FallbackModel not found, will use single model approach")
+                FallbackModel = None
+    
     PYDANTIC_AI_AVAILABLE = True
-    agent_logger.info("✅ Successfully imported pydantic_ai")
+    agent_logger.info("✅ Successfully imported pydantic_ai core components")
+    
 except ImportError as e:
     PYDANTIC_AI_AVAILABLE = False
     PYDANTIC_AI_IMPORT_ERROR = str(e)
@@ -31,11 +65,8 @@ except ImportError as e:
         def __init__(self, deps=None):
             self.deps = deps
     class FallbackModel: pass
+    class ModelMessage: pass
     class ModelRetry(Exception): pass
-
-from ..models.agents import AgentOutput, AgentMessage, AgentRequest, AgentResponse
-from ..utils.logger import agent_logger, log_agent_request, log_agent_response, log_llm_call, log_error
-from ..storage import get_redis, get_supabase
 
 
 class AgentConfig(BaseModel):
@@ -110,25 +141,34 @@ class BaseAgent(ABC):
                 # Debug: Check available imports
                 agent_logger.debug(f"🔍 Pydantic AI imports available: Agent={Agent}, FallbackModel={FallbackModel}")
                 
-                # Create fallback model configuration
+                # Create model configuration
                 models = [self.config.model_primary] + self.config.model_fallbacks
                 agent_logger.info(
                     f"🔍 Configuring models for {self.agent_id}",
                     primary_model=self.config.model_primary,
                     fallback_models=self.config.model_fallbacks,
-                    total_models=len(models)
+                    total_models=len(models),
+                    fallback_model_available=FallbackModel is not None
                 )
                 
                 # Debug: Check each model format
                 for i, model in enumerate(models):
                     agent_logger.debug(f"🔍 Model {i}: {model} (type: {type(model)})")
                 
-                try:
-                    fallback_model = FallbackModel(*models)
-                    agent_logger.debug(f"✅ FallbackModel created successfully: {type(fallback_model)}")
-                except Exception as e:
-                    agent_logger.error(f"❌ Failed to create FallbackModel: {type(e).__name__}: {e}")
-                    raise
+                # Create model configuration based on what's available
+                if FallbackModel is not None:
+                    try:
+                        model_config = FallbackModel(*models)
+                        agent_logger.debug(f"✅ FallbackModel created successfully: {type(model_config)}")
+                    except Exception as e:
+                        agent_logger.error(f"❌ Failed to create FallbackModel: {type(e).__name__}: {e}")
+                        # Try with just primary model
+                        agent_logger.info("🔍 Trying with primary model only...")
+                        model_config = self.config.model_primary
+                else:
+                    # Use primary model directly if FallbackModel not available
+                    agent_logger.info("🔍 FallbackModel not available, using primary model directly")
+                    model_config = self.config.model_primary
                 
                 # Load system prompt
                 agent_logger.debug(f"🔍 Loading system prompt...")
@@ -142,7 +182,7 @@ class BaseAgent(ABC):
                 # Create agent with comprehensive debugging
                 agent_logger.info(f"🔍 Creating pydantic_ai Agent with parameters:")
                 agent_logger.info(f"   - name: {self.agent_id}")
-                agent_logger.info(f"   - model: {type(fallback_model).__name__}")
+                agent_logger.info(f"   - model: {type(model_config).__name__}")
                 agent_logger.info(f"   - result_type: {output_type}")
                 agent_logger.info(f"   - retries: {self.config.max_retries}")
                 agent_logger.info(f"   - system_prompt length: {len(system_prompt)}")
@@ -150,7 +190,7 @@ class BaseAgent(ABC):
                 try:
                     self.ai_agent = Agent(
                         name=self.agent_id,
-                        model=fallback_model,
+                        model=model_config,
                         system_prompt=system_prompt,
                         result_type=output_type,
                         retries=self.config.max_retries
