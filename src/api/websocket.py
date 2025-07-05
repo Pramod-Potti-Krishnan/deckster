@@ -286,7 +286,7 @@ class WebSocketHandler:
             if text.lower().startswith("test:"):
                 await self._handle_test_message(text)
             # Check if this is a clarification response
-            elif message.data.get("response_to"):
+            elif message.data.get("response_to") or (self.workflow_state and self.workflow_state.get("current_phase") == "clarification"):
                 await self._handle_clarification_response(message)
             else:
                 # New presentation request
@@ -469,20 +469,205 @@ class WebSocketHandler:
             await self._send_error("No active workflow", code="NO_WORKFLOW")
             return
         
-        # Create clarification response
-        response = ClarificationResponse(
-            round_id=message.data.get("response_to"),
-            responses=message.data.get("responses", {})
+        api_logger.info(
+            f"Processing clarification response: '{message.data.get('text', '')[:50]}...'",
+            session_id=self.session_id,
+            current_phase=self.workflow_state.get("current_phase")
         )
         
-        # Process through workflow
-        self.workflow_state = await self.workflow_runner.process_clarification(
-            self.workflow_state,
-            response
-        )
+        # Store the user's response in the session context
+        redis = await get_redis()
+        session_data = await redis.get_session(self.session_id) or {}
         
-        # Handle updated state
-        await self._handle_workflow_state()
+        # Add this response to the accumulated clarifications
+        clarifications = session_data.get("clarification_responses", [])
+        clarifications.append({
+            "text": message.data.get("text", ""),
+            "timestamp": message.timestamp.isoformat() if message.timestamp else datetime.utcnow().isoformat()
+        })
+        
+        session_data["clarification_responses"] = clarifications
+        await redis.set_session(self.session_id, session_data)
+        
+        # Check if user indicates they're done answering
+        user_text = message.data.get("text", "").lower()
+        done_keywords = ["done", "that's all", "finished", "continue", "proceed", "go ahead", "next"]
+        
+        if any(keyword in user_text for keyword in done_keywords) or len(clarifications) >= 3:
+            # User is done answering, process all clarifications and continue workflow
+            await self._process_accumulated_clarifications()
+        else:
+            # Acknowledge the response and continue waiting for more
+            await self._send_chat_message(
+                message_type="info",
+                content={
+                    "message": f"Got it: '{message.data.get('text', '')[:50]}...' Anything else about your presentation?",
+                    "context": "Collecting additional details. Say 'done' when you're ready to continue.",
+                    "options": ["I'm done", "Tell you more"],
+                    "question_id": None
+                },
+                progress=self._create_progress_update("clarification", min(20 + len(clarifications) * 15, 80))
+            )
+    
+    async def _process_accumulated_clarifications(self):
+        """Process all accumulated clarification responses and continue workflow."""
+        try:
+            api_logger.info(f"Processing accumulated clarifications", session_id=self.session_id)
+            
+            # Get all clarification responses
+            redis = await get_redis()
+            session_data = await redis.get_session(self.session_id) or {}
+            clarifications = session_data.get("clarification_responses", [])
+            
+            # Combine all responses into a single text
+            combined_responses = " ".join([resp["text"] for resp in clarifications])
+            
+            # Send processing message
+            await self._send_chat_message(
+                message_type="info", 
+                content={
+                    "message": "Perfect! I have all the information I need. Let me create your presentation now...",
+                    "context": "Processing your requirements and creating presentation structure",
+                    "options": None,
+                    "question_id": None
+                },
+                progress=self._create_progress_update("generation", 50)
+            )
+            
+            # Continue the workflow with a new analysis that incorporates the clarifications
+            from ..models.messages import UserInput
+            from datetime import datetime
+            from uuid import uuid4
+            
+            # Create a comprehensive input that includes original request + clarifications
+            original_input = self.workflow_state.get("user_input", {})
+            if hasattr(original_input, 'data'):
+                original_text = original_input.data.get("text", "") if original_input.data else ""
+            else:
+                original_text = original_input.get("data", {}).get("text", "") if isinstance(original_input, dict) else ""
+            
+            comprehensive_input = UserInput(
+                id=f"msg_{uuid4().hex[:8]}",
+                timestamp=datetime.utcnow(),
+                session_id=self.session_id,
+                type="user_input",
+                data={
+                    "text": f"{original_text}. Additional details: {combined_responses}",
+                    "is_clarification_summary": True
+                }
+            )
+            
+            # Update workflow state to indicate we have enough information
+            self.workflow_state["current_phase"] = "generation"
+            self.workflow_state["needs_clarification"] = False
+            self.workflow_state["user_input"] = comprehensive_input
+            
+            # Clear clarification responses from session
+            session_data["clarification_responses"] = []
+            await redis.set_session(self.session_id, session_data)
+            
+            # Continue to next phase
+            await self._continue_workflow_after_clarification()
+            
+        except Exception as e:
+            api_logger.error(f"Error processing accumulated clarifications: {e}", exc_info=True)
+            await self._send_error("Error processing your responses. Please try again.")
+    
+    async def _continue_workflow_after_clarification(self):
+        """Continue workflow after clarification is complete."""
+        try:
+            # Simulate structure creation and final steps
+            await self._send_chat_message(
+                message_type="info",
+                content={
+                    "message": "Creating presentation structure...",
+                    "context": "Building your slides based on the information provided",
+                    "options": None,
+                    "question_id": None
+                },
+                progress=self._create_progress_update("generation", 70)
+            )
+            
+            # Simulate processing time
+            await asyncio.sleep(2)
+            
+            # Send completion
+            await self._send_chat_message(
+                message_type="info",
+                content={
+                    "message": "Your presentation is ready! 🎉",
+                    "context": "Presentation generated successfully with all the details you provided",
+                    "options": ["Download", "Edit", "Share"],
+                    "question_id": None
+                },
+                progress=self._create_progress_update("completed", 100)
+            )
+            
+            # Update final state
+            self.workflow_state["current_phase"] = "completed"
+            
+        except Exception as e:
+            api_logger.error(f"Error continuing workflow: {e}", exc_info=True)
+            await self._send_error("Error completing presentation generation.")
+    
+    async def _send_natural_clarification_question(self):
+        """Send a natural, conversational clarification question."""
+        # Get session context to see what we've already asked
+        redis = await get_redis()
+        session_data = await redis.get_session(self.session_id) or {}
+        clarifications = session_data.get("clarification_responses", [])
+        questions_asked = session_data.get("questions_asked", [])
+        
+        # Determine what to ask based on what we haven't covered yet
+        question_flow = [
+            {
+                "key": "audience",
+                "question": "Who is your target audience? (e.g., kids, business professionals, students, etc.)",
+                "context": "Understanding your audience helps me tailor the content and style appropriately."
+            },
+            {
+                "key": "purpose", 
+                "question": "What's the main goal of this presentation? What do you want your audience to understand or do?",
+                "context": "Knowing the purpose helps me structure the content effectively."
+            },
+            {
+                "key": "topic_detail",
+                "question": "Can you tell me more about the specific topics or key points you want to cover?",
+                "context": "This helps me create relevant and focused content."
+            },
+            {
+                "key": "context",
+                "question": "What's the setting for this presentation? (classroom, meeting, conference, etc.) And roughly how long should it be?",
+                "context": "Context helps me recommend the right format and pacing."
+            }
+        ]
+        
+        # Find the next question to ask
+        next_question = None
+        for q in question_flow:
+            if q["key"] not in questions_asked:
+                next_question = q
+                break
+        
+        if next_question:
+            # Mark this question as asked
+            questions_asked.append(next_question["key"])
+            session_data["questions_asked"] = questions_asked
+            await redis.set_session(self.session_id, session_data)
+            
+            await self._send_chat_message(
+                message_type="question",
+                content={
+                    "message": next_question["question"],
+                    "context": next_question["context"],
+                    "options": None,
+                    "question_id": next_question["key"]
+                },
+                progress=self._create_progress_update("clarification", 15 + len(questions_asked) * 15)
+            )
+        else:
+            # We've asked all our key questions, process what we have
+            await self._process_accumulated_clarifications()
     
     async def _handle_workflow_state(self):
         """Handle workflow state and send appropriate messages."""
@@ -532,11 +717,8 @@ class WebSocketHandler:
             )
         
         elif phase == "clarification":
-            # Send clarification questions
-            rounds = self.workflow_state.get("clarification_rounds", [])
-            if rounds:
-                latest_round = rounds[-1]
-                await self._send_clarification_questions(latest_round)
+            # Send a simple, natural clarification question
+            await self._send_natural_clarification_question()
         
         elif phase == "generation":
             # Send progress update

@@ -9,9 +9,31 @@ import asyncio
 import json
 
 from pydantic import BaseModel, Field
-from pydantic_ai import RunContext
 
 from .base import BaseAgent, AgentConfig, AgentContext
+
+# Import pydantic_ai if available
+try:
+    from pydantic_ai import Agent
+    from pydantic_ai.settings import ModelSettings
+    from pydantic_ai.exceptions import (
+        ModelRetry,
+        UserError,
+        AgentRunError,
+        UsageLimitExceeded,
+        ModelHTTPError
+    )
+    PYDANTIC_AI_AVAILABLE = True
+except ImportError:
+    Agent = None
+    ModelSettings = None
+    PYDANTIC_AI_AVAILABLE = False
+    # Mock exceptions for compatibility
+    class ModelRetry(Exception): pass
+    class UserError(Exception): pass
+    class AgentRunError(Exception): pass
+    class UsageLimitExceeded(Exception): pass
+    class ModelHTTPError(Exception): pass
 from ..models.agents import (
     DirectorInboundOutput, RequirementAnalysis,
     ClarificationQuestion as AgentClarificationQuestion, AgentRequest
@@ -161,7 +183,12 @@ Output structured JSON responses according to the defined schemas."""
             # Continue but with caution
         
         # Check for greeting patterns
-        user_text = user_input.get("text", "").lower().strip()
+        # Handle both direct text and nested data structure
+        if isinstance(user_input.get("data"), dict):
+            user_text = user_input.get("data", {}).get("text", "").lower().strip()
+        else:
+            user_text = user_input.get("text", "").lower().strip()
+            
         greeting_patterns = ["hi", "hello", "hey", "good morning", "good afternoon", 
                            "good evening", "greetings", "howdy", "yo", "hiya", "hi there", "hello there"]
         
@@ -169,6 +196,7 @@ Output structured JSON responses according to the defined schemas."""
         agent_logger.debug(
             f"🔍 Greeting detection check",
             user_text=user_text,
+            user_input_structure=user_input,
             checking_patterns=greeting_patterns[:5] + ["..."]  # Show first 5 patterns
         )
         
@@ -219,9 +247,23 @@ Output structured JSON responses according to the defined schemas."""
             
             return greeting_output
         
-        # Check cache for similar requests
-        cache_key = f"analysis:{hash(user_input.get('text', ''))}"
+        # Check cache for similar requests - use the correct text path
+        if isinstance(user_input.get("data"), dict):
+            text_for_cache = user_input.get("data", {}).get("text", "")
+        else:
+            text_for_cache = user_input.get("text", "")
+        
+        cache_key = f"analysis:{hash(text_for_cache)}"
         cached_analysis = await self.get_cached_result(cache_key)
+        
+        # Debug cache usage
+        agent_logger.debug(
+            f"Cache check for analysis",
+            session_id=context.session_id,
+            text_for_cache=text_for_cache[:50] + "..." if len(text_for_cache) > 50 else text_for_cache,
+            cache_key_hash=hash(text_for_cache),
+            cache_hit=cached_analysis is not None
+        )
         
         if cached_analysis:
             agent_logger.info("Using cached analysis", session_id=context.session_id)
@@ -273,46 +315,112 @@ Output structured JSON responses according to the defined schemas."""
         context: AgentContext
     ) -> RequirementAnalysis:
         """Run requirement analysis using LLM."""
-        prompt = f"""Analyze the following presentation request:
-
-User Input: {user_input.get('text', '')}
-Attachments: {len(user_input.get('attachments', []))} files
-UI References: {user_input.get('ui_references', [])}
-
-Analyze and provide:
-1. Completeness score (0-1) based on having enough information
-2. List of missing information pieces
-3. Detected intent/purpose
-4. Suggested presentation type
-5. Estimated number of slides
-6. Complexity level
-7. Key topics to cover
-8. Suggested presentation flow
-
-Consider:
-- Is the target audience clear?
-- Is the presentation purpose defined?
-- Are there time/length constraints?
-- Is the desired style/tone specified?
-- Are there specific content requirements?"""
         
-        # Run LLM
-        result = await self.run_llm(
-            prompt=prompt,
-            context={
-                "session_history": context.session_history,
-                "user_input": user_input
-            },
-            temperature=0.3
-        )
-        
-        # Parse result into RequirementAnalysis
-        # The Pydantic AI agent should return structured data
-        if hasattr(result, 'data'):
-            return RequirementAnalysis(**result.data)
+        # Use the main agent's run_llm method instead of creating a new agent
+        try:
+            # Prepare the analysis prompt - handle nested data structure
+            if isinstance(user_input.get("data"), dict):
+                text_content = user_input.get("data", {}).get("text", "")
+                attachments = user_input.get("data", {}).get("attachments", [])
+                ui_references = user_input.get("data", {}).get("ui_references", [])
+            else:
+                text_content = user_input.get("text", "")
+                attachments = user_input.get("attachments", [])
+                ui_references = user_input.get("ui_references", [])
+                
+            analysis_prompt = f"""Analyze this presentation request and provide a detailed analysis.
+
+User Input: {text_content}
+Attachments: {len(attachments)} files
+UI References: {ui_references}
+
+Return a JSON object with these fields:
+- completeness_score: float between 0 and 1 indicating how complete the request is
+- missing_information: list of strings describing what information is missing
+- detected_intent: string describing the main purpose
+- presentation_type: string (e.g., "business", "educational", "technical")
+- estimated_slides: integer number of slides needed
+- complexity_level: string ("simple", "moderate", "complex")
+- key_topics: list of main topics to cover
+- suggested_flow: list of section names in order
+
+Example response:
+{{
+    "completeness_score": 0.7,
+    "missing_information": ["target audience", "presentation duration"],
+    "detected_intent": "educate about AI",
+    "presentation_type": "educational",
+    "estimated_slides": 15,
+    "complexity_level": "moderate",
+    "key_topics": ["AI basics", "machine learning", "applications"],
+    "suggested_flow": ["Introduction", "AI Fundamentals", "ML Concepts", "Real-world Applications", "Conclusion"]
+}}"""
+            
+            # Run the analysis using the main agent
+            result = await self.run_llm(
+                prompt=analysis_prompt,
+                context=context.model_dump(mode='json'),  # Ensure context is properly serialized
+                temperature=0.3  # Lower temperature for more consistent analysis
+            )
+            
+            # Parse the result - PydanticAI returns structured data directly
+            # when output_type is configured properly
+            if isinstance(result, RequirementAnalysis):
+                return result
+            elif isinstance(result, dict):
+                return RequirementAnalysis(**result)
+            elif isinstance(result, str):
+                # Try to parse JSON from string
+                try:
+                    data = json.loads(result)
+                    return RequirementAnalysis(**data)
+                except:
+                    agent_logger.warning(f"Could not parse analysis result: {result[:100]}...")
+                    return self._get_default_analysis(user_input)
+            else:
+                agent_logger.warning(f"Unexpected result type: {type(result)} - did you configure output_type correctly?")
+                return self._get_default_analysis(user_input)
+                
+        except Exception as e:
+            agent_logger.error(f"Failed to run requirement analysis: {e}", exc_info=True)
+            return self._get_default_analysis(user_input)
+    
+    def _get_default_analysis(self, user_input: Dict[str, Any]) -> RequirementAnalysis:
+        """Get default analysis when AI is not available."""
+        # Handle nested data structure
+        if isinstance(user_input.get("data"), dict):
+            text = user_input.get("data", {}).get("text", "").lower()
         else:
-            # Fallback parsing
-            return self._parse_analysis_response(str(result))
+            text = user_input.get('text', '').lower()
+        
+        # Simple heuristic analysis
+        has_topic = len(text) > 10
+        has_details = len(text) > 50
+        
+        completeness = 0.3
+        if has_topic:
+            completeness += 0.3
+        if has_details:
+            completeness += 0.3
+            
+        missing_info = []
+        if "audience" not in text and "for" not in text:
+            missing_info.append("Target audience")
+        if "slides" not in text and "pages" not in text:
+            missing_info.append("Number of slides")
+        if "purpose" not in text and "goal" not in text:
+            missing_info.append("Presentation purpose")
+            
+        return RequirementAnalysis(
+            completeness_score=completeness,
+            missing_information=missing_info or ["General clarification needed"],
+            detected_intent="presentation_creation",
+            presentation_type="general",
+            estimated_slides=10,
+            complexity_level="moderate",
+            key_topics=[text[:50] + "..."] if text else ["No topic specified"],
+            suggested_flow=["Introduction", "Main Content", "Conclusion"]
+        )
     
     def _parse_analysis_response(self, response: str) -> RequirementAnalysis:
         """Parse LLM response into RequirementAnalysis."""
@@ -392,60 +500,97 @@ Consider:
         context: AgentContext
     ) -> List[ClarificationQuestion]:
         """Generate clarification questions using LLM."""
-        prompt = f"""Generate clarification questions for the following missing information:
+        prompt = f"""You are an expert presentation consultant. Based on the user's initial request, I need you to ask thoughtful clarification questions to create the perfect presentation.
 
-Missing Information:
+Missing Information Identified:
 {json.dumps(missing_info, indent=2)}
 
 Previous Questions Asked:
 {json.dumps([round.model_dump(mode='json') for round in self.clarification_history.get(context.session_id, [])], indent=2)}
 
-Generate 3-5 specific, actionable questions that will help gather the missing information.
-For each question:
-1. Make it clear and specific
-2. Provide multiple choice options where appropriate
-3. Mark critical questions as required
-4. Add helpful context
-5. Categorize by type (audience, content, style, logistics)
+Please generate 2-4 conversational, intelligent questions that will help me understand:
+1. **Audience & Context**: Who are they presenting to? What's the setting?
+2. **Purpose & Goals**: What do they want to achieve? What action should the audience take?
+3. **Content & Focus**: What are the key messages? What level of detail is needed?
+4. **Style & Constraints**: What tone/style fits? Any time or format constraints?
 
-Avoid:
-- Redundant questions
-- Overly technical language
-- Questions already answered in previous rounds"""
+Make each question:
+- Natural and conversational (not robotic)
+- Focused on one specific aspect
+- Easy to answer in a few words or sentences
+- Relevant to creating a great presentation
+
+Return as a simple list of questions - no complex structure needed. Ask like a helpful colleague would."""
         
-        result = await self.run_llm(
-            prompt=prompt,
-            context={"missing_info": missing_info},
-            temperature=0.5
-        )
+        try:
+            result = await self.run_llm(
+                prompt=prompt,
+                context={"missing_info": missing_info},
+                temperature=0.5
+            )
+        except ModelHTTPError as e:
+            agent_logger.error(f"API error generating clarifications: {e}")
+            # Return fallback questions
+            return self._get_fallback_clarification_questions(missing_info)
+        except UsageLimitExceeded as e:
+            agent_logger.error(f"Usage limit exceeded: {e}")
+            return self._get_fallback_clarification_questions(missing_info)
         
         # Parse into ClarificationQuestion objects
         questions = []
-        if hasattr(result, 'data') and isinstance(result.data, list):
+        
+        # Handle different result types based on PydanticAI best practices
+        if isinstance(result, list):
+            # Direct list result
+            for q_data in result:
+                questions.append(self._parse_clarification_question(q_data))
+        elif hasattr(result, 'data') and isinstance(result.data, list):
+            # RunResult with data attribute (shouldn't happen with proper setup)
             for q_data in result.data:
-                # Convert agent model to message model if needed
-                if 'category' in q_data or 'priority' in q_data:
-                    # This is AgentClarificationQuestion format, convert to message format
-                    message_data = {
-                        'question_id': q_data.get('question_id'),
-                        'question': q_data.get('question'),
-                        'question_type': q_data.get('question_type', 'text'),
-                        'options': q_data.get('options'),
-                        'required': q_data.get('required', True),
-                        'context': q_data.get('context')
-                    }
-                    questions.append(ClarificationQuestion(**message_data))
+                questions.append(self._parse_clarification_question(q_data))
+        elif isinstance(result, str):
+            # String result - try to parse as JSON
+            try:
+                parsed = json.loads(result)
+                if isinstance(parsed, list):
+                    for q_data in parsed:
+                        questions.append(self._parse_clarification_question(q_data))
                 else:
-                    questions.append(ClarificationQuestion(**q_data))
+                    return self._get_fallback_clarification_questions(missing_info)
+            except:
+                return self._get_fallback_clarification_questions(missing_info)
         else:
             # Fallback - create basic questions using message model
-            for info in missing_info[:5]:  # Limit to 5 questions
-                questions.append(ClarificationQuestion(
-                    question=f"Could you please provide more details about {info}?",
-                    question_type="text",
-                    required=True
-                ))
+            return self._get_fallback_clarification_questions(missing_info)
         
+        return questions
+    
+    def _parse_clarification_question(self, q_data: Dict[str, Any]) -> ClarificationQuestion:
+        """Parse a question data dict into ClarificationQuestion."""
+        # Convert agent model to message model if needed
+        if 'category' in q_data or 'priority' in q_data:
+            # This is AgentClarificationQuestion format, convert to message format
+            message_data = {
+                'question_id': q_data.get('question_id'),
+                'question': q_data.get('question'),
+                'question_type': q_data.get('question_type', 'text'),
+                'options': q_data.get('options'),
+                'required': q_data.get('required', True),
+                'context': q_data.get('context')
+            }
+            return ClarificationQuestion(**message_data)
+        else:
+            return ClarificationQuestion(**q_data)
+    
+    def _get_fallback_clarification_questions(self, missing_info: List[str]) -> List[ClarificationQuestion]:
+        """Get fallback clarification questions when AI is unavailable."""
+        questions = []
+        for info in missing_info[:5]:  # Limit to 5 questions
+            questions.append(ClarificationQuestion(
+                question=f"Could you please provide more details about {info}?",
+                question_type="text",
+                required=True
+            ))
         return questions
     
     async def _create_presentation_structure(
@@ -564,39 +709,58 @@ Consider:
 - Visual requirements
 - Industry best practices"""
         
-        result = await self.run_llm(
-            prompt=prompt,
-            context={
-                "requirements": requirements,
-                "similar_count": len(similar_presentations)
-            },
-            temperature=0.4
-        )
+        try:
+            result = await self.run_llm(
+                prompt=prompt,
+                context={
+                    "requirements": requirements,
+                    "similar_count": len(similar_presentations)
+                },
+                temperature=0.4
+            )
+        except ModelRetry as e:
+            agent_logger.warning(f"Model requested retry for structure generation: {e}")
+            # Could implement exponential backoff here
+            raise
+        except (ModelHTTPError, UsageLimitExceeded) as e:
+            agent_logger.error(f"Error generating structure: {e}")
+            # Return fallback structure
+            return self._get_fallback_structure(requirements)
         
-        # Parse into structure
-        if hasattr(result, 'data'):
+        # Parse into structure - handle different result types
+        if isinstance(result, dict):
+            return result
+        elif isinstance(result, PresentationStructureOutput):
+            return result.model_dump(mode='json')
+        elif hasattr(result, 'data'):
+            # This shouldn't happen with proper output_type configuration
+            agent_logger.warning("Received RunResult instead of direct data - check output_type configuration")
             return result.data
         else:
             # Fallback structure
-            return {
-                "title": requirements.get("topic", "Presentation"),
-                "description": "AI-generated presentation",
-                "estimated_slides": 10,
-                "slide_outlines": [
-                    {
-                        "slide_number": i,
-                        "title": f"Slide {i}",
-                        "layout_type": "content",
-                        "content_points": ["Content to be added"]
-                    }
-                    for i in range(1, 11)
-                ],
-                "theme_suggestions": {
-                    "style": "professional",
-                    "color_scheme": "blue"
-                },
-                "next_agents": ["ux_architect", "researcher"]
-            }
+            return self._get_fallback_structure(requirements)
+    
+    def _get_fallback_structure(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
+        """Get fallback structure when AI is unavailable."""
+        return {
+            "title": requirements.get("topic", "Presentation"),
+            "description": "AI-generated presentation",
+            "estimated_slides": 10,
+            "slide_outlines": [
+                {
+                    "slide_number": i,
+                    "title": f"Slide {i}",
+                    "layout_type": "content",
+                    "content_points": ["Content to be added"]
+                }
+                for i in range(1, 11)
+            ],
+            "theme_suggestions": {
+                "style": "professional",
+                "color_scheme": "blue"
+            },
+            "next_agents": ["ux_architect", "researcher"]
+        }
     
     def _determine_next_agents(self, structure: Dict[str, Any]) -> List[str]:
         """Determine which agents to activate next."""
