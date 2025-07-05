@@ -11,22 +11,122 @@ from uuid import uuid4
 
 from ..utils.logger import logger, set_request_id, set_session_id
 
-# Make langgraph optional
+# Debug imports
+import sys
+logger.info(f"🔍 Python version: {sys.version}")
+logger.info(f"🔍 Python executable: {sys.executable}")
+
+# Make langgraph optional with comprehensive debugging
+LANGGRAPH_AVAILABLE = False
 try:
-    from langgraph import StateGraph, END
-    from langgraph.prebuilt import ToolExecutor, ToolInvocation
-    from langgraph.graph import Graph
-    LANGGRAPH_AVAILABLE = True
-    logger.info("✅ LangGraph successfully imported - Full workflow orchestration available")
-except ImportError as e:
-    LANGGRAPH_AVAILABLE = False
-    logger.warning(f"⚠️  LangGraph import failed: {e} - Using simplified workflow")
-    # Define fallback constants
+    logger.info("🔍 Attempting to import langgraph module...")
+    import langgraph
+    logger.info(f"✅ langgraph module found at: {langgraph.__file__}")
+    logger.info(f"✅ langgraph version: {getattr(langgraph, '__version__', 'unknown')}")
+    logger.info(f"✅ Available in langgraph module: {dir(langgraph)[:10]}...")  # First 10 items
+    
+    # Try different import paths - check what's available in the module first
+    try:
+        logger.info("🔍 Inspecting langgraph module contents...")
+        
+        # List all available attributes in the module
+        available_attrs = dir(langgraph)
+        logger.info(f"✅ Available in langgraph: {available_attrs}")
+        
+        # Check for common patterns in the module
+        has_graph = 'graph' in available_attrs or 'Graph' in available_attrs
+        has_state_graph = 'StateGraph' in available_attrs or 'state_graph' in available_attrs
+        
+        logger.info(f"🔍 Module inspection: has_graph={has_graph}, has_state_graph={has_state_graph}")
+        
+        # Try to find StateGraph in different ways
+        StateGraph = None
+        END = None
+        
+        # Method 1: Direct attribute access
+        if hasattr(langgraph, 'StateGraph'):
+            StateGraph = langgraph.StateGraph
+            logger.info("✅ Found StateGraph as direct attribute")
+        
+        # Method 2: Check for graph submodule
+        if StateGraph is None and hasattr(langgraph, 'graph'):
+            logger.info("🔍 Found 'graph' submodule, checking contents...")
+            graph_attrs = dir(langgraph.graph)
+            logger.info(f"   Available in langgraph.graph: {graph_attrs[:20]}...")
+            
+            if hasattr(langgraph.graph, 'StateGraph'):
+                StateGraph = langgraph.graph.StateGraph
+                logger.info("✅ Found StateGraph in graph submodule")
+        
+        # Method 3: Try common import patterns for newer versions
+        if StateGraph is None:
+            try:
+                # Some versions might use this pattern
+                from langgraph.graph.state import StateGraph as SG
+                StateGraph = SG
+                logger.info("✅ Found StateGraph via langgraph.graph.state import")
+            except ImportError:
+                pass
+        
+        # Method 4: Check if it's a function that creates graphs
+        if StateGraph is None:
+            for attr_name in ['create_graph', 'make_graph', 'Graph', 'graph']:
+                if hasattr(langgraph, attr_name):
+                    potential_graph = getattr(langgraph, attr_name)
+                    logger.info(f"🔍 Found '{attr_name}' - type: {type(potential_graph).__name__}")
+                    if callable(potential_graph) and StateGraph is None:
+                        StateGraph = potential_graph
+                        logger.info(f"✅ Using '{attr_name}' as StateGraph alternative")
+                        break
+        
+        # Look for END constant
+        if hasattr(langgraph, 'END'):
+            END = langgraph.END
+            logger.info("✅ Found END constant")
+        elif hasattr(langgraph, 'constants'):
+            if hasattr(langgraph.constants, 'END'):
+                END = langgraph.constants.END
+                logger.info("✅ Found END in constants submodule")
+        
+        if END is None:
+            END = "END"
+            logger.warning("⚠️  Using string 'END' as fallback")
+        
+        # Set availability based on what we found
+        if StateGraph is not None:
+            LANGGRAPH_AVAILABLE = True
+            logger.info(f"✅ LangGraph configured successfully with StateGraph type: {type(StateGraph).__name__}")
+            
+            # Define other classes as fallbacks
+            class ToolExecutor: pass
+            class ToolInvocation: pass
+            Graph = StateGraph
+        else:
+            raise ImportError("Could not find StateGraph in any expected location")
+            
+    except ImportError as e1:
+        logger.error(f"❌ Failed to properly import from langgraph: {e1}")
+        logger.error(f"   This indicates langgraph may not be properly installed or has a different API")
+        
+        # Define all fallback classes
+        LANGGRAPH_AVAILABLE = False
+        END = "END"
+        class StateGraph: pass
+        class ToolExecutor: pass
+        class ToolInvocation: pass
+        class Graph: pass
+            
+except Exception as e:
+    logger.error(f"❌ Critical error importing langgraph: {type(e).__name__}: {e}")
+    logger.error(f"   This will prevent real AI functionality from working!")
+    # Define fallback classes
     END = "END"
     class StateGraph: pass
     class ToolExecutor: pass
     class ToolInvocation: pass
     class Graph: pass
+
+logger.info(f"📊 LangGraph import result: LANGGRAPH_AVAILABLE = {LANGGRAPH_AVAILABLE}")
 
 from ..models.messages import (
     UserInput, PresentationRequest, ClarificationRound,

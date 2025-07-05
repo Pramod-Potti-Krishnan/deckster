@@ -14,13 +14,17 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 # Make pydantic_ai optional
+PYDANTIC_AI_IMPORT_ERROR = None
 try:
     from pydantic_ai import Agent, RunContext
     from pydantic_ai.models import ModelMessage, FallbackModel
     from pydantic_ai.exceptions import ModelRetry
     PYDANTIC_AI_AVAILABLE = True
-except ImportError:
+    agent_logger.info("✅ Successfully imported pydantic_ai")
+except ImportError as e:
     PYDANTIC_AI_AVAILABLE = False
+    PYDANTIC_AI_IMPORT_ERROR = str(e)
+    agent_logger.warning(f"⚠️  Failed to import pydantic_ai: {e}")
     # Create mock classes for compatibility
     class Agent: pass
     class RunContext:
@@ -99,41 +103,75 @@ class BaseAgent(ABC):
     
     def _init_pydantic_agent(self):
         """Initialize the Pydantic AI agent."""
+        agent_logger.info(f"🔍 Starting pydantic_ai agent initialization for {self.agent_id}")
+        
         if PYDANTIC_AI_AVAILABLE:
             try:
+                # Debug: Check available imports
+                agent_logger.debug(f"🔍 Pydantic AI imports available: Agent={Agent}, FallbackModel={FallbackModel}")
+                
                 # Create fallback model configuration
                 models = [self.config.model_primary] + self.config.model_fallbacks
                 agent_logger.info(
-                    f"Initializing pydantic_ai agent for {self.agent_id}",
+                    f"🔍 Configuring models for {self.agent_id}",
                     primary_model=self.config.model_primary,
                     fallback_models=self.config.model_fallbacks,
-                    pydantic_ai_available=True
+                    total_models=len(models)
                 )
                 
-                fallback_model = FallbackModel(*models)
+                # Debug: Check each model format
+                for i, model in enumerate(models):
+                    agent_logger.debug(f"🔍 Model {i}: {model} (type: {type(model)})")
+                
+                try:
+                    fallback_model = FallbackModel(*models)
+                    agent_logger.debug(f"✅ FallbackModel created successfully: {type(fallback_model)}")
+                except Exception as e:
+                    agent_logger.error(f"❌ Failed to create FallbackModel: {type(e).__name__}: {e}")
+                    raise
                 
                 # Load system prompt
+                agent_logger.debug(f"🔍 Loading system prompt...")
                 system_prompt = self._load_system_prompt()
+                agent_logger.debug(f"✅ System prompt loaded, length: {len(system_prompt)}")
                 
-                # Create agent
-                self.ai_agent = Agent(
-                    name=self.agent_id,
-                    model=fallback_model,
-                    system_prompt=system_prompt,
-                    result_type=self.get_output_type(),
-                    retries=self.config.max_retries
-                )
+                # Get output type
+                output_type = self.get_output_type()
+                agent_logger.debug(f"🔍 Output type for agent: {output_type}")
                 
-                agent_logger.info(
-                    f"✅ Successfully initialized pydantic_ai agent for {self.agent_id}",
-                    agent_type=type(self.ai_agent).__name__,
-                    models_configured=len(models)
-                )
+                # Create agent with comprehensive debugging
+                agent_logger.info(f"🔍 Creating pydantic_ai Agent with parameters:")
+                agent_logger.info(f"   - name: {self.agent_id}")
+                agent_logger.info(f"   - model: {type(fallback_model).__name__}")
+                agent_logger.info(f"   - result_type: {output_type}")
+                agent_logger.info(f"   - retries: {self.config.max_retries}")
+                agent_logger.info(f"   - system_prompt length: {len(system_prompt)}")
+                
+                try:
+                    self.ai_agent = Agent(
+                        name=self.agent_id,
+                        model=fallback_model,
+                        system_prompt=system_prompt,
+                        result_type=output_type,
+                        retries=self.config.max_retries
+                    )
+                    agent_logger.info(
+                        f"✅ Successfully initialized pydantic_ai agent for {self.agent_id}",
+                        agent_type=type(self.ai_agent).__name__,
+                        agent_attrs=dir(self.ai_agent)[:10],  # First 10 attributes
+                        models_configured=len(models)
+                    )
+                except Exception as e:
+                    agent_logger.error(f"❌ Failed to create Agent instance: {type(e).__name__}: {e}")
+                    agent_logger.error(f"   Full error details: {repr(e)}")
+                    raise
+                    
             except Exception as e:
                 agent_logger.error(
-                    f"Failed to initialize pydantic_ai agent for {self.agent_id}",
+                    f"❌ Failed to initialize pydantic_ai agent for {self.agent_id}",
                     error=str(e),
-                    error_type=type(e).__name__
+                    error_type=type(e).__name__,
+                    exc_info=True  # Include full traceback
                 )
                 self.ai_agent = None
                 self.system_prompt = self._load_system_prompt()
@@ -141,7 +179,8 @@ class BaseAgent(ABC):
             # Fallback: Store config for direct API calls
             agent_logger.warning(
                 f"⚠️  pydantic_ai not available for {self.agent_id} - using mock mode",
-                pydantic_ai_available=False
+                pydantic_ai_available=False,
+                pydantic_ai_import_error=PYDANTIC_AI_IMPORT_ERROR
             )
             self.system_prompt = self._load_system_prompt()
             self.ai_agent = None
@@ -318,10 +357,12 @@ class BaseAgent(ABC):
             if not PYDANTIC_AI_AVAILABLE or self.ai_agent is None:
                 # Return a mock response when pydantic_ai is not available
                 agent_logger.warning(
-                    "Using mock LLM response - pydantic_ai not available. Install pydantic-ai for real AI functionality.",
+                    "⚠️  Using mock LLM response - Real AI not available",
                     agent_id=self.agent_id,
                     pydantic_ai_available=PYDANTIC_AI_AVAILABLE,
-                    ai_agent_initialized=self.ai_agent is not None
+                    ai_agent_initialized=self.ai_agent is not None,
+                    pydantic_ai_import_error=PYDANTIC_AI_IMPORT_ERROR,
+                    reason="pydantic_ai not imported" if not PYDANTIC_AI_AVAILABLE else "ai_agent not initialized"
                 )
                 
                 # Log mock LLM call
@@ -344,17 +385,35 @@ class BaseAgent(ABC):
             agent_logger.info(
                 f"🤖 Running REAL AI with pydantic_ai for {self.agent_id}",
                 model=self.config.model_primary,
-                prompt_preview=prompt[:100] + "..." if len(prompt) > 100 else prompt
+                prompt_preview=prompt[:100] + "..." if len(prompt) > 100 else prompt,
+                ai_agent_type=type(self.ai_agent).__name__,
+                ai_agent_attrs=dir(self.ai_agent)[:5]  # First 5 attributes
+            )
+            
+            # Debug: Check environment variables
+            import os
+            agent_logger.debug(
+                "🔍 Environment check for AI APIs",
+                has_openai_key=bool(os.getenv("OPENAI_API_KEY")),
+                has_anthropic_key=bool(os.getenv("ANTHROPIC_API_KEY")),
+                openai_key_prefix=os.getenv("OPENAI_API_KEY", "")[:10] + "..." if os.getenv("OPENAI_API_KEY") else "None"
             )
             
             # Run agent
-            result = await self.ai_agent.run(
-                prompt,
-                context=run_context,
-                model_settings={
-                    "temperature": temperature or self.config.temperature
-                }
-            )
+            try:
+                agent_logger.debug(f"🔍 Calling ai_agent.run() with prompt length: {len(prompt)}")
+                result = await self.ai_agent.run(
+                    prompt,
+                    context=run_context,
+                    model_settings={
+                        "temperature": temperature or self.config.temperature
+                    }
+                )
+                agent_logger.debug(f"✅ ai_agent.run() returned: {type(result).__name__}")
+            except Exception as e:
+                agent_logger.error(f"❌ ai_agent.run() failed: {type(e).__name__}: {e}")
+                agent_logger.error(f"   Full error: {repr(e)}")
+                raise
             
             # Log LLM call
             latency_ms = (time.time() - start_time) * 1000
@@ -371,7 +430,8 @@ class BaseAgent(ABC):
             agent_logger.info(
                 f"✅ Real AI response received for {self.agent_id}",
                 latency_ms=latency_ms,
-                result_type=type(result).__name__
+                result_type=type(result).__name__,
+                result_attrs=dir(result)[:10] if result else []
             )
             
             return result

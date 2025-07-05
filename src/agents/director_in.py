@@ -165,11 +165,31 @@ Output structured JSON responses according to the defined schemas."""
         greeting_patterns = ["hi", "hello", "hey", "good morning", "good afternoon", 
                            "good evening", "greetings", "howdy", "yo", "hiya", "hi there", "hello there"]
         
+        # Debug greeting detection
+        agent_logger.debug(
+            f"🔍 Greeting detection check",
+            user_text=user_text,
+            checking_patterns=greeting_patterns[:5] + ["..."]  # Show first 5 patterns
+        )
+        
         is_greeting = any(user_text.startswith(pattern) or user_text == pattern for pattern in greeting_patterns)
+        
+        agent_logger.info(
+            f"🔍 Greeting detection result",
+            user_text=user_text,
+            is_greeting=is_greeting,
+            session_id=context.session_id
+        )
         
         if is_greeting:
             # Return greeting response
-            return DirectorInboundOutput(
+            agent_logger.info(
+                f"✅ Returning greeting response",
+                session_id=context.session_id,
+                output_type="greeting"
+            )
+            
+            greeting_output = DirectorInboundOutput(
                 agent_id=self.agent_id,
                 output_type="greeting",
                 timestamp=datetime.utcnow(),
@@ -189,6 +209,15 @@ Output structured JSON responses according to the defined schemas."""
                 },
                 metadata={"is_greeting": True}
             )
+            
+            agent_logger.debug(
+                f"🔍 Greeting output created",
+                output_type=greeting_output.output_type,
+                has_greeting_response=greeting_output.greeting_response is not None,
+                greeting_message_preview=greeting_output.greeting_response.get("message", "")[:50] + "..."
+            )
+            
+            return greeting_output
         
         # Check cache for similar requests
         cache_key = f"analysis:{hash(user_input.get('text', ''))}"

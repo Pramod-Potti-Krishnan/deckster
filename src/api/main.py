@@ -194,6 +194,94 @@ async def health_check():
     return JSONResponse(content=health_status, status_code=status_code)
 
 
+# AI health check endpoint
+@app.get("/health/ai")
+async def ai_health_check():
+    """
+    AI system health check endpoint.
+    Tests AI agent initialization and availability.
+    """
+    import os
+    from ..workflows.main import LANGGRAPH_AVAILABLE
+    
+    ai_health = {
+        "status": "checking",
+        "timestamp": datetime.utcnow().isoformat(),
+        "components": {},
+        "environment": {}
+    }
+    
+    # Check environment variables
+    ai_health["environment"]["openai_key_configured"] = bool(os.getenv("OPENAI_API_KEY"))
+    ai_health["environment"]["anthropic_key_configured"] = bool(os.getenv("ANTHROPIC_API_KEY"))
+    ai_health["environment"]["app_env"] = os.getenv("APP_ENV", "unknown")
+    
+    # Check pydantic_ai availability
+    try:
+        from ..agents.base import PYDANTIC_AI_AVAILABLE, PYDANTIC_AI_IMPORT_ERROR
+        ai_health["components"]["pydantic_ai"] = {
+            "available": PYDANTIC_AI_AVAILABLE,
+            "error": PYDANTIC_AI_IMPORT_ERROR
+        }
+    except Exception as e:
+        ai_health["components"]["pydantic_ai"] = {
+            "available": False,
+            "error": str(e)
+        }
+    
+    # Check langgraph availability
+    ai_health["components"]["langgraph"] = {
+        "available": LANGGRAPH_AVAILABLE,
+        "error": None if LANGGRAPH_AVAILABLE else "Failed to import StateGraph"
+    }
+    
+    # Test agent initialization
+    try:
+        from ..agents.director_in import DirectorInboundAgent
+        test_agent = DirectorInboundAgent()
+        ai_health["components"]["director_agent"] = {
+            "initialized": True,
+            "has_ai_agent": test_agent.ai_agent is not None,
+            "agent_id": test_agent.agent_id
+        }
+    except Exception as e:
+        ai_health["components"]["director_agent"] = {
+            "initialized": False,
+            "error": str(e)
+        }
+    
+    # Test workflow runner
+    try:
+        from ..workflows.main import get_workflow_runner
+        workflow_runner = get_workflow_runner()
+        ai_health["components"]["workflow_runner"] = {
+            "initialized": True,
+            "type": type(workflow_runner).__name__
+        }
+    except Exception as e:
+        ai_health["components"]["workflow_runner"] = {
+            "initialized": False,
+            "error": str(e)
+        }
+    
+    # Determine overall status
+    if all([
+        ai_health["components"].get("pydantic_ai", {}).get("available", False),
+        ai_health["components"].get("langgraph", {}).get("available", False),
+        ai_health["components"].get("director_agent", {}).get("has_ai_agent", False),
+        ai_health["environment"]["openai_key_configured"] or ai_health["environment"]["anthropic_key_configured"]
+    ]):
+        ai_health["status"] = "healthy"
+        ai_health["mode"] = "real_ai"
+    else:
+        ai_health["status"] = "degraded"
+        ai_health["mode"] = "mock"
+    
+    # Return with appropriate status code
+    status_code = 200 if ai_health["status"] == "healthy" else 503
+    return JSONResponse(content=ai_health, status_code=status_code)
+
+
 # CORS test endpoint (no auth required)
 @app.get("/api/health/cors")
 async def cors_test():
