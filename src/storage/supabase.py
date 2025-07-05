@@ -453,11 +453,23 @@ class SupabaseStore:
             result = self.client.table("agent_outputs").insert(data).execute()
             return result.data[0]["id"]
         except Exception as e:
-            log_error(e, "agent_output_save_failed", {
-                "session_id": session_id,
-                "agent_id": agent_id
-            })
-            raise
+            # Check if this is an RLS policy violation (non-critical error)
+            if "row-level security policy" in str(e).lower() or "42501" in str(e):
+                # Log as warning but don't block workflow
+                storage_logger.warning(
+                    "Agent output save blocked by RLS policy (non-critical): continuing workflow",
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    error_message=str(e)
+                )
+                return None  # Return None to indicate save failed but workflow continues
+            else:
+                # Re-raise other errors as they may be critical
+                log_error(e, "agent_output_save_failed", {
+                    "session_id": session_id,
+                    "agent_id": agent_id
+                })
+                raise
     
     @log_execution_time("supabase.get_agent_outputs")
     async def get_agent_outputs(

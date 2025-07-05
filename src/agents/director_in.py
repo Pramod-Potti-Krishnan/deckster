@@ -14,11 +14,11 @@ from pydantic_ai import RunContext
 from .base import BaseAgent, AgentConfig, AgentContext
 from ..models.agents import (
     DirectorInboundOutput, RequirementAnalysis,
-    ClarificationQuestion, AgentRequest
+    ClarificationQuestion as AgentClarificationQuestion, AgentRequest
 )
 from ..models.messages import (
     UserInput, PresentationRequest, ClarificationRound,
-    ClarificationResponse
+    ClarificationResponse, ClarificationQuestion
 )
 from ..models.presentation import Presentation, Slide, LayoutType
 from ..utils.logger import agent_logger
@@ -364,16 +364,27 @@ Avoid:
         questions = []
         if hasattr(result, 'data') and isinstance(result.data, list):
             for q_data in result.data:
-                questions.append(ClarificationQuestion(**q_data))
+                # Convert agent model to message model if needed
+                if 'category' in q_data or 'priority' in q_data:
+                    # This is AgentClarificationQuestion format, convert to message format
+                    message_data = {
+                        'question_id': q_data.get('question_id'),
+                        'question': q_data.get('question'),
+                        'question_type': q_data.get('question_type', 'text'),
+                        'options': q_data.get('options'),
+                        'required': q_data.get('required', True),
+                        'context': q_data.get('context')
+                    }
+                    questions.append(ClarificationQuestion(**message_data))
+                else:
+                    questions.append(ClarificationQuestion(**q_data))
         else:
-            # Fallback - create basic questions
+            # Fallback - create basic questions using message model
             for info in missing_info[:5]:  # Limit to 5 questions
                 questions.append(ClarificationQuestion(
                     question=f"Could you please provide more details about {info}?",
                     question_type="text",
-                    required=True,
-                    category="general",
-                    priority="medium"
+                    required=True
                 ))
         
         return questions

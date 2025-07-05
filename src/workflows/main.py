@@ -397,6 +397,31 @@ def all_agents_complete(state: WorkflowState) -> str:
 class MockWorkflow:
     """Mock workflow implementation for Phase 1 without LangGraph."""
     
+    def _is_recoverable_error(self, error: Exception) -> bool:
+        """Determine if an error is recoverable and workflow should continue."""
+        # RLS policy violations are recoverable (non-critical)
+        if "row-level security policy" in str(error).lower():
+            return True
+        
+        # Validation errors might be recoverable
+        if "ValidationError" in str(type(error)):
+            return True
+        
+        # Network/timeout errors are recoverable
+        if any(error_type in str(type(error)) for error_type in [
+            "TimeoutError", "ConnectionError", "HTTPError", "RequestException"
+        ]):
+            return True
+        
+        # Import/module errors are usually not recoverable
+        if any(error_type in str(type(error)) for error_type in [
+            "ImportError", "ModuleNotFoundError", "AttributeError"
+        ]):
+            return False
+        
+        # Default to recoverable for other errors
+        return True
+    
     async def astream(self, state: WorkflowState, config=None):
         """Mock async stream that just runs analyze_request."""
         logger.info(
@@ -435,13 +460,48 @@ class MockWorkflow:
                 f"Mock workflow error: {type(e).__name__}: {str(e)}",
                 session_id=state.get("session_id"),
                 error_type=type(e).__name__,
+                error_message=str(e),
+                current_phase=state.get("current_phase", "unknown"),
                 exc_info=True
             )
-            state.update({
-                "current_phase": "error",
-                "agent_errors": {"workflow": str(e)},
-                "updated_at": datetime.utcnow()
-            })
+            
+            # Determine if this is a recoverable error
+            error_count = state.get("error_count", 0) + 1
+            max_retries = 3
+            
+            if error_count < max_retries and self._is_recoverable_error(e):
+                # Recoverable error - retry with error state but continue workflow
+                logger.info(
+                    f"Recoverable error encountered (attempt {error_count}/{max_retries}), continuing workflow",
+                    session_id=state.get("session_id"),
+                    error_type=type(e).__name__
+                )
+                state.update({
+                    "current_phase": "error_recovery",
+                    "error_count": error_count,
+                    "last_error": {
+                        "type": type(e).__name__,
+                        "message": str(e),
+                        "timestamp": datetime.utcnow().isoformat()
+                    },
+                    "can_retry": True,
+                    "updated_at": datetime.utcnow()
+                })
+            else:
+                # Non-recoverable error or max retries exceeded
+                logger.error(
+                    f"Non-recoverable error or max retries exceeded ({error_count}/{max_retries})",
+                    session_id=state.get("session_id"),
+                    error_type=type(e).__name__
+                )
+                state.update({
+                    "current_phase": "error",
+                    "error_count": error_count,
+                    "agent_errors": {"workflow": str(e)},
+                    "can_retry": False,
+                    "updated_at": datetime.utcnow()
+                })
+            
             yield state
 
 

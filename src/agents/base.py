@@ -532,7 +532,7 @@ class BaseAgent(ABC):
         """
         try:
             supabase = await self.supabase
-            await supabase.save_agent_output(
+            result = await supabase.save_agent_output(
                 session_id=context.session_id,
                 agent_id=self.agent_id,
                 output_type=output.output_type,
@@ -544,7 +544,15 @@ class BaseAgent(ABC):
                 tokens_used=getattr(output, "tokens_used", None),
                 error_message=error_message
             )
+            
+            if result is None:
+                # RLS policy prevented save, but workflow continues
+                logger.debug(f"Agent output save blocked by RLS policy for {self.agent_id}, continuing normally")
+            else:
+                logger.debug(f"Agent output saved successfully for {self.agent_id}")
+                
         except Exception as e:
+            # Handle any other exceptions that weren't caught by save_agent_output
             log_error(e, "agent_output_save_failed", {
                 "agent_id": self.agent_id,
                 "session_id": context.session_id

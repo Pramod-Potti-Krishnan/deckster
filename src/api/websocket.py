@@ -302,7 +302,12 @@ class WebSocketHandler:
             # Send acknowledgment
             await self._send_chat_message(
                 message_type="info",
-                content="I'm analyzing your request...",
+                content={
+                    "message": "I'm analyzing your request...",
+                    "context": "Starting presentation analysis workflow",
+                    "options": None,
+                    "question_id": None
+                },
                 progress=self._create_progress_update("analysis", 10)
             )
             
@@ -413,7 +418,12 @@ class WebSocketHandler:
             # Send progress update
             await self._send_chat_message(
                 message_type="info",
-                content="Creating your presentation structure...",
+                content={
+                    "message": "Creating your presentation structure...",
+                    "context": "Generating slides based on analysis",
+                    "options": None,
+                    "question_id": None
+                },
                 progress=self._create_progress_update("generation", 30)
             )
         
@@ -441,7 +451,12 @@ class WebSocketHandler:
             for stage, percentage, agents in stages:
                 await self._send_chat_message(
                     message_type="info",
-                    content=f"Testing {stage} stage at {percentage}%",
+                    content={
+                        "message": f"Testing {stage} stage at {percentage}%",
+                        "context": f"Debug test for {stage} phase",
+                        "options": None,
+                        "question_id": None
+                    },
                     progress=self._create_progress_update(stage, percentage, agents)
                 )
                 await asyncio.sleep(1)  # Small delay between messages
@@ -463,20 +478,35 @@ class WebSocketHandler:
             # 1. Chat only
             await self._send_chat_message(
                 message_type="info",
-                content="Test: Chat data only message"
+                content={
+                    "message": "Test: Chat data only message",
+                    "context": "Testing basic chat functionality",
+                    "options": None,
+                    "question_id": None
+                }
             )
             
             # 2. Chat with progress
             await self._send_chat_message(
                 message_type="info",
-                content="Test: Chat with progress",
+                content={
+                    "message": "Test: Chat with progress",
+                    "context": "Testing progress integration",
+                    "options": None,
+                    "question_id": None
+                },
                 progress=self._create_progress_update("analysis", 25, ["director"])
             )
             
             # 3. Question with actions
             await self._send_chat_message(
                 message_type="question",
-                content="Test: Question with actions",
+                content={
+                    "message": "Test: Question with actions",
+                    "context": "Testing interactive message features",
+                    "options": ["Yes", "No"],
+                    "question_id": "test_q_001"
+                },
                 actions=[
                     {"action_id": "yes", "type": "custom", "label": "Yes", "primary": True},
                     {"action_id": "no", "type": "custom", "label": "No"}
@@ -510,7 +540,12 @@ class WebSocketHandler:
                 slide_data=test_slide_data,
                 chat_data=ChatData(
                     type="info",
-                    content="Test: Slide data sent. Check if state.slides is an array!"
+                    content={
+                        "message": "Test: Slide data sent. Check if state.slides is an array!",
+                        "context": "Testing slide data structure",
+                        "options": None,
+                        "question_id": None
+                    }
                 )
             )
             
@@ -525,7 +560,12 @@ class WebSocketHandler:
         else:
             await self._send_chat_message(
                 message_type="info",
-                content=f"Unknown test command: {test_command}. Available: progress, empty, structures"
+                content={
+                    "message": f"Unknown test command: {test_command}. Available: progress, empty, structures",
+                    "context": "Test command help",
+                    "options": ["progress", "empty", "structures"],
+                    "question_id": None
+                }
             )
     
     async def _handle_frontend_action(self, message: FrontendAction):
@@ -541,7 +581,12 @@ class WebSocketHandler:
         else:
             await self._send_chat_message(
                 message_type="info",
-                content=f"Action '{action}' noted but not implemented in Phase 1"
+                content={
+                    "message": f"Action '{action}' noted but not implemented in Phase 1",
+                    "context": "Frontend action processing",
+                    "options": None,
+                    "question_id": None
+                }
             )
     
     async def _handle_connection_message(self, message: ConnectionMessage):
@@ -751,7 +796,12 @@ class WebSocketHandler:
             # Implementation would save the current state
             await self._send_chat_message(
                 message_type="info",
-                content="Draft saved successfully"
+                content={
+                    "message": "Draft saved successfully",
+                    "context": "Presentation draft saved to database",
+                    "options": None,
+                    "question_id": None
+                }
             )
         else:
             await self._send_error("No presentation to save")
@@ -762,7 +812,12 @@ class WebSocketHandler:
         format_type = payload.get("format", "pptx")
         await self._send_chat_message(
             message_type="info",
-            content=f"Export to {format_type} will be available in Phase 2"
+            content={
+                "message": f"Export to {format_type} will be available in Phase 2",
+                "context": "Export functionality preview",
+                "options": ["pptx", "pdf", "html"],
+                "question_id": None
+            }
         )
     
     async def _share_presentation(self, payload: Dict[str, Any]):
@@ -770,7 +825,12 @@ class WebSocketHandler:
         # Phase 1: Just acknowledge
         await self._send_chat_message(
             message_type="info",
-            content="Sharing functionality will be available in Phase 2"
+            content={
+                "message": "Sharing functionality will be available in Phase 2",
+                "context": "Share feature preview",
+                "options": ["public link", "team share", "email"],
+                "question_id": None
+            }
         )
 
 

@@ -55,7 +55,7 @@ class ClarificationQuestion(BaseModel):
     required: bool = True
     context: Optional[str] = None
     priority: Literal["high", "medium", "low"] = "medium"
-    category: str  # e.g., "audience", "content", "style"
+    category: str = "general"  # e.g., "audience", "content", "style"
 
 
 class DirectorInboundOutput(AgentOutput):
