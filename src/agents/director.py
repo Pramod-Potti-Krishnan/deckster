@@ -6,11 +6,18 @@ from typing import Union
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
+from pydantic_ai.providers.google import GoogleProvider
 from src.models.agents import (
     StateContext, ClarifyingQuestions, ConfirmationPlan, 
     PresentationStrawman, Slide
 )
 from src.utils.logger import setup_logger
+from src.utils.logfire_config import instrument_agents
+from src.utils.context_builder import ContextBuilder
+from src.utils.token_tracker import TokenTracker
+from src.utils.prompt_manager import PromptManager
+from src.utils.ab_testing import ABTestManager
 
 logger = setup_logger(__name__)
 
@@ -20,40 +27,138 @@ class DirectorAgent:
     
     def __init__(self):
         """Initialize state-specific agents following PydanticAI best practices."""
+        # Instrument agents for token tracking
+        instrument_agents()
+        
+        # Get settings to check which AI service is available
+        from config.settings import get_settings
+        settings = get_settings()
+        
+        # Determine which model to use
+        if settings.GOOGLE_API_KEY:
+            provider = GoogleProvider(api_key=settings.GOOGLE_API_KEY)
+            # Use GoogleModel with explicit settings for better control
+            model = GoogleModel('gemini-2.5-flash', provider=provider)
+            model_turbo = GoogleModel('gemini-2.5-pro', provider=provider)
+        elif settings.OPENAI_API_KEY:
+            model = 'openai:gpt-4'
+            model_turbo = 'openai:gpt-4-turbo'
+        elif settings.ANTHROPIC_API_KEY:
+            model = 'anthropic:claude-3-sonnet-20240229'
+            model_turbo = 'anthropic:claude-3-opus-20240229'
+        else:
+            raise ValueError(
+                "No AI API key configured. Please set GOOGLE_API_KEY, OPENAI_API_KEY, or "
+                "ANTHROPIC_API_KEY in your .env file."
+            )
+        
+        # Initialize modular prompt support
+        self.use_modular_prompts = settings.USE_MODULAR_PROMPTS
+        self.prompt_manager = PromptManager() if self.use_modular_prompts else None
+        self.ab_test_manager = ABTestManager(settings.MODULAR_PROMPT_PERCENTAGE)
+        
+        if self.use_modular_prompts:
+            logger.info("DirectorAgent using MODULAR prompt system")
+            self._init_modular_agents(model, model_turbo)
+        else:
+            logger.info("DirectorAgent using MONOLITHIC prompt system")
+            self._init_monolithic_agents(model, model_turbo)
+        
+        # Phase 1: Initialize context builder and token tracker
+        self.context_builder = ContextBuilder()
+        if self.use_modular_prompts and self.prompt_manager:
+            self.context_builder.prompt_manager = self.prompt_manager
+        
+        self.token_tracker = TokenTracker()
+        
+        # Feature flag for A/B testing
+        self.use_context_builder = True  # Can toggle for comparison
+        
+        # Calculate system prompt tokens once (estimate: 1 token per 4 characters)
+        if not self.use_modular_prompts:
+            self.system_prompt_tokens = len(self._get_system_prompt()) // 4
+        else:
+            # For modular, we'll calculate per-state
+            self.system_prompt_tokens = 0
+        
+        logger.info(f"DirectorAgent initialized with {type(model).__name__ if hasattr(model, '__class__') else model} model")
+        logger.info(f"Context Builder: {'Enabled' if self.use_context_builder else 'Disabled'}")
+        if not self.use_modular_prompts:
+            logger.info(f"System prompt tokens: {self.system_prompt_tokens}")
+    
+    def _init_modular_agents(self, model, model_turbo):
+        """Initialize agents for modular prompt system"""
+        # Use minimal system prompt for all agents
+        minimal_prompt = "You are Deckster, an AI presentation assistant."
+        
+        self.greeting_agent = Agent(
+            model=model,
+            output_type=str,
+            system_prompt=minimal_prompt,
+            retries=2,
+            name="director_greeting_modular"
+        )
+        
+        self.questions_agent = Agent(
+            model=model,
+            output_type=ClarifyingQuestions,
+            system_prompt=minimal_prompt,
+            retries=2,
+            name="director_questions_modular"
+        )
+        
+        self.plan_agent = Agent(
+            model=model,
+            output_type=ConfirmationPlan,
+            system_prompt=minimal_prompt,
+            retries=2,
+            name="director_plan_modular"
+        )
+        
+        self.strawman_agent = Agent(
+            model=model_turbo,
+            output_type=PresentationStrawman,
+            system_prompt=minimal_prompt,
+            retries=2,
+            name="director_strawman_modular"
+        )
+    
+    def _init_monolithic_agents(self, model, model_turbo):
+        """Initialize agents with monolithic prompt system"""
+        system_prompt = self._get_system_prompt()
+        
         # Create state-specific agents
         self.greeting_agent = Agent(
-            model='openai:gpt-4',
+            model=model,
             output_type=str,  # Simple text output
-            system_prompt=self._get_system_prompt(),
+            system_prompt=system_prompt,
             retries=2,
             name="director_greeting"
         )
         
         self.questions_agent = Agent(
-            model='openai:gpt-4',
+            model=model,
             output_type=ClarifyingQuestions,
-            system_prompt=self._get_system_prompt(),
+            system_prompt=system_prompt,
             retries=2,
             name="director_questions"
         )
         
         self.plan_agent = Agent(
-            model='openai:gpt-4',
+            model=model,
             output_type=ConfirmationPlan,
-            system_prompt=self._get_system_prompt(),
+            system_prompt=system_prompt,
             retries=2,
             name="director_plan"
         )
         
         self.strawman_agent = Agent(
-            model='openai:gpt-4-turbo',
+            model=model_turbo,
             output_type=PresentationStrawman,
-            system_prompt=self._get_system_prompt(),
+            system_prompt=system_prompt,
             retries=2,
             name="director_strawman"
         )
-        
-        logger.info("DirectorAgent initialized with state-specific agents")
     
     def _get_system_prompt(self) -> str:
         """Get the comprehensive system prompt for the director."""
@@ -270,33 +375,124 @@ CRITICAL: The system MUST feed ALL context from the conversations in that sessio
             Response appropriate for the current state
         """
         try:
-            # Build prompt with full context
-            # Convert conversation history to serializable format
-            history_serializable = []
-            for item in state_context.conversation_history:
-                if isinstance(item, dict):
-                    # Make a copy to avoid modifying original
-                    item_copy = item.copy()
-                    # Convert any Pydantic objects in content
-                    if hasattr(item_copy.get('content'), 'dict'):
-                        item_copy['content'] = item_copy['content'].dict()
-                    history_serializable.append(item_copy)
-                else:
-                    history_serializable.append(str(item))
+            session_id = state_context.session_data.get("id", "unknown")
             
-            prompt = f"""
+            # Decide whether to use modular prompts for this session
+            use_modular_for_session = (
+                self.use_modular_prompts or 
+                self.ab_test_manager.should_use_modular(session_id)
+            )
+            
+            if use_modular_for_session:
+                # Modular prompt approach
+                context, user_prompt, system_prompt = (
+                    self.context_builder.build_context_with_modular_prompt(
+                        state=state_context.current_state,
+                        session_data={
+                            "id": session_id,
+                            "user_initial_request": state_context.session_data.get("user_initial_request"),
+                            "clarifying_answers": state_context.session_data.get("clarifying_answers"),
+                            "conversation_history": state_context.conversation_history
+                        },
+                        user_intent=state_context.user_intent.dict() if hasattr(state_context, 'user_intent') and state_context.user_intent else None
+                    )
+                )
+                
+                # Track token usage for modular system
+                user_tokens = len(user_prompt) // 4
+                system_tokens = len(system_prompt) // 4
+                
+                await self.token_tracker.track_modular(
+                    session_id,
+                    state_context.current_state,
+                    user_tokens,
+                    system_tokens
+                )
+                
+                logger.info(
+                    f"Modular Prompt - State: {state_context.current_state}, "
+                    f"User Tokens: {user_tokens}, System Tokens: {system_tokens}, "
+                    f"Total: {user_tokens + system_tokens}"
+                )
+                
+                # Store system prompt for later use with agent
+                self._current_system_prompt = system_prompt
+                prompt = user_prompt
+                
+            elif self.use_context_builder:
+                # Phase 1: Use minimal context approach with monolithic prompt
+                context, prompt = self.context_builder.build_context(
+                    state=state_context.current_state,
+                    session_data={
+                        "id": session_id,
+                        "user_initial_request": state_context.session_data.get("user_initial_request"),
+                        "clarifying_answers": state_context.session_data.get("clarifying_answers"),
+                        "conversation_history": state_context.conversation_history
+                    },
+                    user_intent=state_context.user_intent.dict() if hasattr(state_context, 'user_intent') and state_context.user_intent else None
+                )
+                
+                # Track optimized tokens
+                user_token_count = len(prompt) // 4
+                await self.token_tracker.track_optimized(
+                    session_id,
+                    state_context.current_state,
+                    user_token_count,
+                    self.system_prompt_tokens
+                )
+                
+                logger.info(
+                    f"Context Builder - State: {state_context.current_state}, "
+                    f"User Tokens: {user_token_count}, System Tokens: {self.system_prompt_tokens}, "
+                    f"Total: {user_token_count + self.system_prompt_tokens}"
+                )
+                
+                self._current_system_prompt = None
+            else:
+                # Keep existing approach for baseline comparison
+                # Convert conversation history to serializable format
+                history_serializable = []
+                for item in state_context.conversation_history:
+                    if isinstance(item, dict):
+                        # Make a copy to avoid modifying original
+                        item_copy = item.copy()
+                        # Convert any Pydantic objects in content
+                        if hasattr(item_copy.get('content'), 'dict'):
+                            item_copy['content'] = item_copy['content'].dict()
+                        history_serializable.append(item_copy)
+                    else:
+                        history_serializable.append(str(item))
+                
+                prompt = f"""
 Current state: {state_context.current_state}
 Conversation history: {json.dumps(history_serializable)}
 Session data: {json.dumps(state_context.session_data)}
 
 Process according to the rules for state {state_context.current_state}.
 """
+                
+                # Track baseline tokens
+                user_token_count = len(prompt) // 4
+                await self.token_tracker.track_baseline(
+                    session_id,
+                    state_context.current_state,
+                    user_token_count,
+                    self.system_prompt_tokens
+                )
+                
+                self._current_system_prompt = None
+                
+                logger.info(
+                    f"Full Context - State: {state_context.current_state}, "
+                    f"User Tokens: {user_token_count}, System Tokens: {self.system_prompt_tokens}, "
+                    f"Total: {user_token_count + self.system_prompt_tokens}"
+                )
             
             # Route to appropriate agent based on state
             if state_context.current_state == "PROVIDE_GREETING":
                 result = await self.greeting_agent.run(
                     prompt,
-                    model_settings=ModelSettings(temperature=0.7, max_tokens=200)
+                    model_settings=ModelSettings(temperature=0.7, max_tokens=500)
                 )
                 response = result.data  # Simple string
                 logger.info("Generated greeting")
@@ -304,7 +500,7 @@ Process according to the rules for state {state_context.current_state}.
             elif state_context.current_state == "ASK_CLARIFYING_QUESTIONS":
                 result = await self.questions_agent.run(
                     prompt,
-                    model_settings=ModelSettings(temperature=0.5, max_tokens=300)
+                    model_settings=ModelSettings(temperature=0.5, max_tokens=1000)
                 )
                 response = result.data  # ClarifyingQuestions object
                 logger.info(f"Generated {len(response.questions)} clarifying questions")
@@ -312,7 +508,7 @@ Process according to the rules for state {state_context.current_state}.
             elif state_context.current_state == "CREATE_CONFIRMATION_PLAN":
                 result = await self.plan_agent.run(
                     prompt,
-                    model_settings=ModelSettings(temperature=0.3, max_tokens=500)
+                    model_settings=ModelSettings(temperature=0.3, max_tokens=2000)
                 )
                 response = result.data  # ConfirmationPlan object
                 logger.info(f"Generated confirmation plan with {response.proposed_slide_count} slides")
@@ -321,7 +517,7 @@ Process according to the rules for state {state_context.current_state}.
                 logger.info(f"Generating strawman for state {state_context.current_state}")
                 result = await self.strawman_agent.run(
                     prompt,
-                    model_settings=ModelSettings(temperature=0.4, max_tokens=4000)
+                    model_settings=ModelSettings(temperature=0.4, max_tokens=8000)
                 )
                 response = result.data  # PresentationStrawman object
                 logger.info(f"Generated strawman with {len(response.slides)} slides")
@@ -337,8 +533,35 @@ Process according to the rules for state {state_context.current_state}.
             raise
         except Exception as e:
             error_msg = str(e)
-            if "Connection error" in error_msg:
-                logger.error(f"Connection error in state {state_context.current_state} - Please check your OPENAI_API_KEY is set in .env file")
+            # Handle Gemini-specific errors
+            if "MALFORMED_FUNCTION_CALL" in error_msg:
+                logger.error(f"Gemini function call error in state {state_context.current_state}. This may be due to complex output structure.")
+                logger.error(f"Full error: {error_msg}")
+            elif "MAX_TOKENS" in error_msg:
+                logger.error(f"Token limit exceeded in state {state_context.current_state}. Consider increasing max_tokens.")
+            elif "Connection error" in error_msg:
+                logger.error(f"Connection error in state {state_context.current_state} - Please check your API key is set in .env file")
             else:
                 logger.error(f"Error processing state {state_context.current_state}: {error_msg}")
             raise
+    
+    def get_token_report(self, session_id: str) -> dict:
+        """Get token usage report for a specific session."""
+        return self.token_tracker.get_savings_report(session_id)
+    
+    def print_token_report(self, session_id: str) -> None:
+        """Print formatted token usage report for a session."""
+        self.token_tracker.print_session_report(session_id)
+    
+    def get_aggregate_token_report(self) -> dict:
+        """Get aggregate token usage report across all sessions."""
+        return self.token_tracker.get_aggregate_report()
+    
+    def print_aggregate_token_report(self) -> None:
+        """Print formatted aggregate token usage report."""
+        self.token_tracker.print_aggregate_report()
+    
+    def toggle_context_builder(self, enabled: bool) -> None:
+        """Toggle context builder on/off for A/B testing."""
+        self.use_context_builder = enabled
+        logger.info(f"Context Builder: {'Enabled' if enabled else 'Disabled'}")
