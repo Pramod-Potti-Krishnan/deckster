@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-End-to-end automated testing tool for the Director agent.
+End-to-end automated testing tool for the Director agent with Streamlined Protocol support.
 Tests complete conversation flows through all states with predefined scenarios.
-Supports both legacy and streamlined WebSocket protocols.
 """
 import asyncio
 import json
@@ -39,22 +38,27 @@ from test_utils import (
 )
 
 
-class DirectorE2ETester:
-    """Automated end-to-end tester for Director agent with protocol support."""
+class DirectorE2ETesterStreamlined:
+    """Automated end-to-end tester for Director agent with Streamlined Protocol support."""
     
-    def __init__(self, scenario_file: str = "test_scenarios.json"):
+    def __init__(self, scenario_file: str = "test_scenarios.json", use_streamlined: bool = None):
         """Initialize the tester with scenarios."""
         self.director = DirectorAgent()
         self.intent_router = IntentRouter()
         self.workflow = WorkflowOrchestrator()
         
-        # Get settings and determine protocol
+        # Get settings and determine which protocol to use
         self.settings = get_settings()
-        self.use_streamlined = self.settings.USE_STREAMLINED_PROTOCOL
-        
-        # Initialize packagers for protocol handling
+        if use_streamlined is None:
+            self.use_streamlined = self.settings.USE_STREAMLINED_PROTOCOL
+        else:
+            self.use_streamlined = use_streamlined
+            
+        # Initialize packagers
         self.streamlined_packager = StreamlinedMessagePackager()
         self.legacy_packager = MessagePackager()
+        
+        print(f"\n{Colors.BOLD}Protocol: {Colors.GREEN}{'Streamlined' if self.use_streamlined else 'Legacy'}{Colors.ENDC}")
         
         # Load test scenarios
         scenario_path = os.path.join(os.path.dirname(__file__), scenario_file)
@@ -80,68 +84,9 @@ class DirectorE2ETester:
             print(f"\n{Colors.BOLD}{num}️⃣  {name}{Colors.ENDC}")
             print(f"    {desc}")
     
-    def format_streamlined_messages(self, messages: List[Any]) -> str:
-        """Format streamlined messages for display."""
-        output = []
-        for msg in messages:
-            if msg.type == "chat_message":
-                if msg.payload.list_items:
-                    output.append(f"{msg.payload.text}")
-                    for item in msg.payload.list_items:
-                        output.append(f"  • {item}")
-                else:
-                    output.append(msg.payload.text)
-                    if msg.payload.sub_title:
-                        output.append(f"\n{msg.payload.sub_title}")
-            elif msg.type == "action_request":
-                output.append(f"\n{msg.payload.prompt_text}")
-                for action in msg.payload.actions:
-                    marker = "►" if action.primary else "▷"
-                    output.append(f"  {marker} {action.label}")
-            elif msg.type == "slide_update":
-                output.append(f"\n📊 Presentation ready: {msg.payload.metadata.main_title}")
-                output.append(f"   {len(msg.payload.slides)} slides")
-                output.append(f"   Theme: {msg.payload.metadata.overall_theme}")
-                output.append(f"   Audience: {msg.payload.metadata.target_audience}")
-                output.append(f"   Duration: {msg.payload.metadata.presentation_duration} minutes")
-            elif msg.type == "status_update":
-                output.append(f"⏳ {msg.payload.text}")
-        return "\n".join(output)
-    
-    def format_slide_details(self, slide) -> str:
-        """Format a single slide with all planning fields."""
-        output = []
-        output.append(f"\n{Colors.GREEN}Slide {slide.slide_number}: {slide.title}{Colors.ENDC}")
-        output.append(f"  Type: {slide.slide_type}")
-        output.append(f"  ID: {slide.slide_id}")
-        output.append(f"  Narrative: {slide.narrative}")
-        
-        output.append(f"  Key Points:")
-        for point in slide.key_points:
-            output.append(f"    • {point}")
-        
-        # Display planning fields if present
-        if hasattr(slide, 'analytics_needed') and slide.analytics_needed:
-            output.append(f"  {Colors.CYAN}Analytics Needed:{Colors.ENDC}")
-            output.append(f"    {slide.analytics_needed}")
-            
-        if hasattr(slide, 'visuals_needed') and slide.visuals_needed:
-            output.append(f"  {Colors.HEADER}Visuals Needed:{Colors.ENDC}")
-            output.append(f"    {slide.visuals_needed}")
-            
-        if hasattr(slide, 'diagrams_needed') and slide.diagrams_needed:
-            output.append(f"  {Colors.YELLOW}Diagrams Needed:{Colors.ENDC}")
-            output.append(f"    {slide.diagrams_needed}")
-            
-        if hasattr(slide, 'structure_preference') and slide.structure_preference:
-            output.append(f"  {Colors.BLUE}Layout Preference:{Colors.ENDC} {slide.structure_preference}")
-            
-        return "\n".join(output)
-    
     def show_interactive_menu(self) -> str:
         """Show interactive menu and get user choice."""
-        protocol_status = f"{'Streamlined' if self.use_streamlined else 'Legacy'} Protocol"
-        print(f"\n{Colors.BOLD}🎯 Deckster E2E Test Suite ({protocol_status}){Colors.ENDC}")
+        print(f"\n{Colors.BOLD}🎯 Deckster E2E Test Suite (Streamlined Protocol){Colors.ENDC}")
         print("═" * 60)
         
         self.show_scenarios_menu()
@@ -166,14 +111,90 @@ class DirectorE2ETester:
             else:
                 print(f"{Colors.RED}Invalid choice. Please enter 1-5 or 'q':{Colors.ENDC} ", end="")
     
+    def format_streamlined_messages(self, messages: List[Any]) -> str:
+        """Format streamlined messages for display."""
+        output = []
+        for msg in messages:
+            if msg.type == "chat_message":
+                if msg.payload.list_items:
+                    output.append(f"{msg.payload.text}")
+                    for item in msg.payload.list_items:
+                        output.append(f"  • {item}")
+                else:
+                    output.append(msg.payload.text)
+                    if msg.payload.sub_title:
+                        output.append(f"\n{msg.payload.sub_title}")
+                        
+            elif msg.type == "action_request":
+                output.append(f"\n{msg.payload.prompt_text}")
+                for action in msg.payload.actions:
+                    marker = "►" if action.primary else "▷"
+                    output.append(f"  {marker} {action.label}")
+                    
+            elif msg.type == "slide_update":
+                output.append(f"\n📊 Presentation ready: {msg.payload.metadata.main_title}")
+                output.append(f"   {len(msg.payload.slides)} slides generated")
+                output.append(f"   Theme: {msg.payload.metadata.overall_theme}")
+                output.append(f"   Duration: {msg.payload.metadata.presentation_duration} minutes")
+                
+                # Show slide details
+                output.append(f"\n📑 Slides Overview:")
+                for slide in msg.payload.slides:
+                    output.append(f"\n   Slide {slide.slide_number}: {slide.slide_id}")
+                    # Extract title from HTML if possible
+                    if "<h1" in slide.html_content:
+                        start = slide.html_content.find("<h1")
+                        start = slide.html_content.find(">", start) + 1
+                        end = slide.html_content.find("</h1>", start)
+                        if end > start:
+                            title = slide.html_content[start:end].strip()
+                            output.append(f"     Title: {title}")
+                    elif "<h2" in slide.html_content:
+                        start = slide.html_content.find("<h2")
+                        start = slide.html_content.find(">", start) + 1
+                        end = slide.html_content.find("</h2>", start)
+                        if end > start:
+                            title = slide.html_content[start:end].strip()
+                            output.append(f"     Title: {title}")
+                    output.append(f"     HTML: {len(slide.html_content)} bytes")
+                
+            elif msg.type == "status_update":
+                if msg.payload.progress is not None:
+                    output.append(f"⏳ {msg.payload.text} ({msg.payload.progress}%)")
+                else:
+                    output.append(f"⏳ {msg.payload.text}")
+        
+        return "\n".join(output)
+    
+    def package_response(self, response: Any, session_id: str, state: str, context: StateContext) -> Union[Dict, List]:
+        """Package response based on protocol setting."""
+        if self.use_streamlined:
+            messages = self.streamlined_packager.package_messages(
+                session_id=session_id,
+                state=state,
+                agent_output=response,
+                context=context
+            )
+            return messages
+        else:
+            message = self.legacy_packager.package(
+                response=response,
+                session_id=session_id,
+                current_state=state
+            )
+            return message
+    
     async def run_scenario(self, scenario_name: str) -> Dict[str, Any]:
         """Run a complete test scenario."""
         if scenario_name not in self.scenarios:
             raise ValueError(f"Unknown scenario: {scenario_name}")
         
         scenario = self.scenarios[scenario_name]
+        session_id = f"test_{scenario_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
         print(f"\n{Colors.BOLD}🎬 Running Scenario: {scenario['name']}{Colors.ENDC}")
         print(f"📖 Description: {scenario['description']}")
+        print(f"🔧 Session ID: {session_id}")
         print_separator()
         
         results = {
@@ -182,7 +203,8 @@ class DirectorE2ETester:
             "passed": True,
             "errors": [],
             "states_completed": [],
-            "outputs": {}
+            "outputs": {},
+            "protocol": "streamlined" if self.use_streamlined else "legacy"
         }
         
         # Initialize context
@@ -194,15 +216,10 @@ class DirectorE2ETester:
             print("─" * 60)
             greeting = await self.director.process(context)
             
-            # Handle protocol-specific display
+            # Package and display based on protocol
+            packaged = self.package_response(greeting, session_id, "PROVIDE_GREETING", context)
             if self.use_streamlined:
-                messages = self.streamlined_packager.package_messages(
-                    session_id=f"test_{scenario_name}",
-                    state="PROVIDE_GREETING",
-                    agent_output=greeting,
-                    context=context
-                )
-                print(format_agent_message(self.format_streamlined_messages(messages)))
+                print(format_agent_message(self.format_streamlined_messages(packaged)))
             else:
                 print(format_agent_message(greeting))
                 
@@ -225,7 +242,7 @@ class DirectorE2ETester:
             )
             context.user_intent = intent
             
-            # Save initial topic to session data (simulating what websocket handler does)
+            # Save initial topic to session data
             context.session_data['user_initial_request'] = user_topic
             context.current_state = "ASK_CLARIFYING_QUESTIONS"
             
@@ -234,15 +251,10 @@ class DirectorE2ETester:
             print("─" * 60)
             questions = await self.director.process(context)
             
-            # Handle protocol-specific display
+            # Package and display
+            packaged = self.package_response(questions, session_id, "ASK_CLARIFYING_QUESTIONS", context)
             if self.use_streamlined:
-                messages = self.streamlined_packager.package_messages(
-                    session_id=f"test_{scenario_name}",
-                    state="ASK_CLARIFYING_QUESTIONS",
-                    agent_output=questions,
-                    context=context
-                )
-                print(format_agent_message(self.format_streamlined_messages(messages)))
+                print(format_agent_message(self.format_streamlined_messages(packaged)))
             else:
                 print(format_agent_message(format_clarifying_questions(questions)))
                 
@@ -273,16 +285,12 @@ class DirectorE2ETester:
             print("─" * 60)
             plan = await self.director.process(context)
             
-            # Handle protocol-specific display
+            # Package and display
+            packaged = self.package_response(plan, session_id, "CREATE_CONFIRMATION_PLAN", context)
             if self.use_streamlined:
-                messages = self.streamlined_packager.package_messages(
-                    session_id=f"test_{scenario_name}",
-                    state="CREATE_CONFIRMATION_PLAN",
-                    agent_output=plan,
-                    context=context
-                )
-                print(format_agent_message(self.format_streamlined_messages(messages)))
-                print(f"{Colors.CYAN}[Streamlined: {len(messages)} messages]{Colors.ENDC}")
+                print(format_agent_message(self.format_streamlined_messages(packaged)))
+                # Show message count for streamlined
+                print(f"\n{Colors.CYAN}[Streamlined: {len(packaged)} messages sent]{Colors.ENDC}")
             else:
                 print(format_agent_message(format_confirmation_plan(plan)))
                 
@@ -309,39 +317,40 @@ class DirectorE2ETester:
             print(f"\n{format_state('GENERATE_STRAWMAN')}")
             print("─" * 60)
             
-            # For streamlined, show status update first
+            # For streamlined, we would normally send a status update first
             if self.use_streamlined:
                 status_msg = self.streamlined_packager.create_pre_generation_status(
-                    session_id=f"test_{scenario_name}",
+                    session_id=session_id,
                     state="GENERATE_STRAWMAN"
                 )
                 print(format_agent_message(f"⏳ {status_msg.payload.text}"))
+                print(f"{Colors.CYAN}[Status update sent before processing]{Colors.ENDC}")
             
             strawman = await self.director.process(context)
             
-            # Handle protocol-specific display
+            # Package and display
+            packaged = self.package_response(strawman, session_id, "GENERATE_STRAWMAN", context)
             if self.use_streamlined:
-                messages = self.streamlined_packager.package_messages(
-                    session_id=f"test_{scenario_name}",
-                    state="GENERATE_STRAWMAN",
-                    agent_output=strawman,
-                    context=context
-                )
-                print(format_agent_message(self.format_streamlined_messages(messages)))
-                print(f"{Colors.CYAN}[Streamlined: {len(messages)} messages with structured JSON data]{Colors.ENDC}")
+                print(format_agent_message(self.format_streamlined_messages(packaged)))
+                print(f"\n{Colors.CYAN}[Streamlined: {len(packaged)} messages sent]{Colors.ENDC}")
                 
-                # Show detailed slide content from the slide_update message
-                slide_update_msg = next((msg for msg in messages if msg.type == "slide_update"), None)
-                if slide_update_msg:
-                    print(f"\n{Colors.BOLD}📄 Detailed Slide Content:{Colors.ENDC}")
-                    for slide_data in slide_update_msg.payload.slides:
-                        print(self.format_slide_details(slide_data))
-            else:
-                print(format_agent_message(format_strawman_summary(strawman)))
-                # Also show slide details for legacy protocol
+                # Also show the actual slide content details
                 print(f"\n{Colors.BOLD}📄 Slide Content Details:{Colors.ENDC}")
                 for slide in strawman.slides:
-                    print(self.format_slide_details(slide))
+                    print(f"\n{Colors.GREEN}Slide {slide.slide_number}: {slide.title}{Colors.ENDC}")
+                    print(f"  Type: {slide.slide_type}")
+                    print(f"  Narrative: {slide.narrative}")
+                    print(f"  Key Points:")
+                    for point in slide.key_points:
+                        print(f"    • {point}")
+                    if slide.visuals_needed:
+                        print(f"  Visuals: {slide.visuals_needed}")
+                    if slide.analytics_needed:
+                        print(f"  Analytics: {slide.analytics_needed}")
+                    if slide.diagrams_needed:
+                        print(f"  Diagrams: {slide.diagrams_needed}")
+            else:
+                print(format_agent_message(format_strawman_summary(strawman)))
                 
             add_to_history(context, "assistant", strawman)
             results["states_completed"].append("GENERATE_STRAWMAN")
@@ -366,42 +375,16 @@ class DirectorE2ETester:
             print(f"\n{format_state('REFINE_STRAWMAN')}")
             print("─" * 60)
             
-            # For streamlined, show status update first
+            # For streamlined, send status update first
             if self.use_streamlined:
                 status_msg = self.streamlined_packager.create_pre_generation_status(
-                    session_id=f"test_{scenario_name}",
+                    session_id=session_id,
                     state="REFINE_STRAWMAN"
                 )
                 print(format_agent_message(f"⏳ {status_msg.payload.text}"))
+                print(f"{Colors.CYAN}[Status update sent before processing]{Colors.ENDC}")
             
             refined_strawman = await self.director.process(context)
-            
-            # Handle protocol-specific display
-            if self.use_streamlined:
-                messages = self.streamlined_packager.package_messages(
-                    session_id=f"test_{scenario_name}",
-                    state="REFINE_STRAWMAN",
-                    agent_output=refined_strawman,
-                    context=context
-                )
-                print(format_agent_message(self.format_streamlined_messages(messages)))
-                print(f"{Colors.CYAN}[Streamlined: {len(messages)} messages with refined JSON data]{Colors.ENDC}")
-                
-                # Show detailed slide content from the slide_update message
-                slide_update_msg = next((msg for msg in messages if msg.type == "slide_update"), None)
-                if slide_update_msg:
-                    print(f"\n{Colors.BOLD}📄 Refined Slide Content:{Colors.ENDC}")
-                    # Show only the affected slides
-                    if slide_update_msg.payload.affected_slides:
-                        print(f"{Colors.YELLOW}Affected slides: {', '.join(slide_update_msg.payload.affected_slides)}{Colors.ENDC}")
-                    for slide_data in slide_update_msg.payload.slides:
-                        print(self.format_slide_details(slide_data))
-            else:
-                print(format_agent_message("Strawman refined based on your feedback."))
-                # Also show refined slide details for legacy protocol
-                print(f"\n{Colors.BOLD}📄 Refined Slide Content:{Colors.ENDC}")
-                for slide in refined_strawman.slides:
-                    print(self.format_slide_details(slide))
             
             # Validate refinement
             if hasattr(refined_strawman, 'slides') and hasattr(strawman, 'slides'):
@@ -412,6 +395,41 @@ class DirectorE2ETester:
                     results["errors"].append(f"Refinement changed slide count from {original_count} to {refined_count}")
                 else:
                     print(format_success(f"Refinement preserved slide count: {refined_count} slides"))
+            
+            # Package and display
+            packaged = self.package_response(refined_strawman, session_id, "REFINE_STRAWMAN", context)
+            if self.use_streamlined:
+                print(format_agent_message(self.format_streamlined_messages(packaged)))
+                print(f"\n{Colors.CYAN}[Streamlined: {len(packaged)} messages sent]{Colors.ENDC}")
+                
+                # Show what changed in refinement
+                print(f"\n{Colors.BOLD}📝 Refined Slide Details:{Colors.ENDC}")
+                # Find changed slides by comparing affected_slides from message
+                affected_slides = []
+                for msg in packaged:
+                    if msg.type == "slide_update" and msg.payload.affected_slides:
+                        affected_slides = msg.payload.affected_slides
+                        break
+                
+                for slide in refined_strawman.slides:
+                    if not affected_slides or slide.slide_id in affected_slides:
+                        print(f"\n{Colors.YELLOW}Slide {slide.slide_number}: {slide.title} (Updated){Colors.ENDC}")
+                    else:
+                        print(f"\n{Colors.GREEN}Slide {slide.slide_number}: {slide.title}{Colors.ENDC}")
+                    print(f"  Type: {slide.slide_type}")
+                    print(f"  Narrative: {slide.narrative}")
+                    print(f"  Key Points:")
+                    for point in slide.key_points:
+                        print(f"    • {point}")
+                    if slide.visuals_needed:
+                        print(f"  Visuals: {slide.visuals_needed}")
+                    if slide.analytics_needed:
+                        print(f"  Analytics: {slide.analytics_needed}")
+                    if slide.diagrams_needed:
+                        print(f"  Diagrams: {slide.diagrams_needed}")
+            else:
+                print(format_agent_message("Strawman refined based on your feedback."))
+                
             add_to_history(context, "assistant", refined_strawman)
             results["states_completed"].append("REFINE_STRAWMAN")
             results["outputs"]["refined_strawman"] = refined_strawman
@@ -422,10 +440,20 @@ class DirectorE2ETester:
             save_conversation(context, save_path)
             results["conversation_saved"] = save_path
             
+            # Protocol-specific summary
+            if self.use_streamlined:
+                print(f"\n{Colors.BOLD}📊 Streamlined Protocol Summary:{Colors.ENDC}")
+                print(f"  • Clean message separation")
+                print(f"  • Status updates before long operations")
+                print(f"  • Pre-rendered HTML slides")
+                print(f"  • Direct UI component mapping")
+            
         except Exception as e:
             results["passed"] = False
             results["errors"].append(f"Exception: {str(e)}")
             print(format_error(f"Test failed with exception: {str(e)}"))
+            import traceback
+            traceback.print_exc()
         
         return results
     
@@ -560,8 +588,7 @@ class DirectorE2ETester:
     def print_summary(self, results: List[Dict[str, Any]]) -> None:
         """Print test summary with enhanced formatting."""
         print(f"\n{Colors.BOLD}{'═'*60}{Colors.ENDC}")
-        protocol_info = f"{'Streamlined' if self.use_streamlined else 'Legacy'} Protocol"
-        print(f"{Colors.BOLD}📊 TEST SUMMARY ({protocol_info}){Colors.ENDC}")
+        print(f"{Colors.BOLD}📊 TEST SUMMARY (Protocol: {'Streamlined' if self.use_streamlined else 'Legacy'}){Colors.ENDC}")
         print(f"{Colors.BOLD}{'═'*60}{Colors.ENDC}\n")
         
         total = len(results)
@@ -598,13 +625,14 @@ class DirectorE2ETester:
             status = "✅" if completed == total else "🔄" if completed > 0 else "❌"
             print(f"{icon} {state}: {completed}/{total} {status}")
         
-        # Show protocol benefits if using streamlined
+        # Protocol-specific benefits summary
         if self.use_streamlined:
-            print(f"\n{Colors.BOLD}✨ Streamlined Protocol Benefits:{Colors.ENDC}")
-            print("  • Multiple focused messages per state")
-            print("  • Complete slide data with all planning fields")
-            print("  • Real-time status updates")
-            print("  • Clean separation of data and presentation")
+            print(f"\n{Colors.BOLD}✨ Streamlined Protocol Benefits Demonstrated:{Colors.ENDC}")
+            print("  • Multiple focused messages instead of monolithic structure")
+            print("  • Status updates before long operations")
+            print("  • Clean separation of chat, actions, and slides")
+            print("  • Pre-rendered HTML slide content")
+            print("  • Direct UI component mapping")
 
 
 async def main():
@@ -619,8 +647,8 @@ async def main():
         sys.exit(1)
     
     parser = argparse.ArgumentParser(
-        description="End-to-end testing for Director agent",
-        epilog="Example: python test_director_e2e.py --scenario technical"
+        description="End-to-end testing for Director agent with Streamlined Protocol support",
+        epilog="Example: python test_director_e2e_streamlined.py --scenario technical"
     )
     parser.add_argument(
         "--scenario", 
@@ -629,10 +657,21 @@ async def main():
         help="Run specific scenario (default, executive, technical, educational, sales)"
     )
     parser.add_argument("--list", action="store_true", help="List available scenarios")
+    parser.add_argument(
+        "--protocol",
+        type=str,
+        choices=["streamlined", "legacy"],
+        help="Force specific protocol (default: use settings)"
+    )
     
     args = parser.parse_args()
     
-    tester = DirectorE2ETester()
+    # Determine protocol
+    use_streamlined = None
+    if args.protocol:
+        use_streamlined = (args.protocol == "streamlined")
+    
+    tester = DirectorE2ETesterStreamlined(use_streamlined=use_streamlined)
     
     if args.list:
         tester.show_scenarios_menu()
@@ -658,3 +697,5 @@ if __name__ == "__main__":
         print(f"\n{Colors.YELLOW}Tests interrupted by user{Colors.ENDC}")
     except Exception as e:
         print(format_error(f"Fatal error: {str(e)}"))
+        import traceback
+        traceback.print_exc()

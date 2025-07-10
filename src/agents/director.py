@@ -18,6 +18,7 @@ from src.utils.context_builder import ContextBuilder
 from src.utils.token_tracker import TokenTracker
 from src.utils.prompt_manager import PromptManager
 from src.utils.ab_testing import ABTestManager
+from src.utils.asset_formatter import AssetFormatter
 
 logger = setup_logger(__name__)
 
@@ -522,6 +523,10 @@ Process according to the rules for state {state_context.current_state}.
                 response = result.data  # PresentationStrawman object
                 logger.info(f"Generated strawman with {len(response.slides)} slides")
                 logger.debug(f"First slide: {response.slides[0].slide_id if response.slides else 'No slides'}")
+                
+                # Post-process to ensure asset fields are in correct format
+                response = AssetFormatter.format_strawman(response)
+                logger.info("Applied asset field formatting to strawman")
                 
             else:
                 raise ValueError(f"Unknown state: {state_context.current_state}")

@@ -34,16 +34,29 @@ class Settings(BaseSettings):
     
     # Modular Prompt System
     USE_MODULAR_PROMPTS: bool = Field(
-        default=False,
-        description="Enable modular prompt system (experimental)"
+        default=True,
+        description="Enable modular prompt system"
     )
     
     # A/B Testing
     MODULAR_PROMPT_PERCENTAGE: int = Field(
-        default=0,
+        default=100,
         ge=0,
         le=100,
         description="Percentage of sessions to use modular prompts (0-100)"
+    )
+    
+    # Streamlined WebSocket Protocol
+    USE_STREAMLINED_PROTOCOL: bool = Field(
+        default=True,
+        description="Enable streamlined WebSocket message protocol"
+    )
+    
+    STREAMLINED_PROTOCOL_PERCENTAGE: int = Field(
+        default=100,
+        ge=0,
+        le=100,
+        description="Percentage of sessions to use streamlined protocol (0-100)"
     )
     
     class Config:

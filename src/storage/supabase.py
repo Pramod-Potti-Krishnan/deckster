@@ -13,25 +13,33 @@ logger = setup_logger(__name__)
 _supabase_client: Optional[Client] = None
 
 
-def get_supabase_client() -> Client:
+def get_supabase_client() -> Optional[Client]:
     """
     Get or create the Supabase client instance.
     
     Returns:
-        Supabase client
+        Supabase client or None if not configured
     """
     global _supabase_client
     
     if _supabase_client is None:
         settings = get_settings()
         
-        # Create client
-        _supabase_client = create_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_ANON_KEY
-        )
+        # Check if Supabase is configured
+        if not settings.SUPABASE_URL or not settings.SUPABASE_ANON_KEY:
+            logger.warning("Supabase not configured - some features will be disabled")
+            return None
         
-        logger.info("Supabase client initialized")
+        try:
+            # Create client
+            _supabase_client = create_client(
+                settings.SUPABASE_URL,
+                settings.SUPABASE_ANON_KEY
+            )
+            logger.info("Supabase client initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize Supabase client: {e}")
+            return None
     
     return _supabase_client
 

@@ -5,6 +5,8 @@ import json
 from typing import Dict, Any
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
+from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
+from pydantic_ai.providers.google import GoogleProvider
 from src.models.agents import UserIntent
 from src.utils.logger import setup_logger
 
@@ -16,14 +18,32 @@ class IntentRouter:
     
     def __init__(self):
         """Initialize the intent router agent."""
+        # Get settings to check which AI service is available
+        from config.settings import get_settings
+        settings = get_settings()
+        
+        # Determine which model to use
+        if settings.GOOGLE_API_KEY:
+            provider = GoogleProvider(api_key=settings.GOOGLE_API_KEY)
+            model = GoogleModel('gemini-2.5-flash', provider=provider)  # Fast model for routing
+        elif settings.OPENAI_API_KEY:
+            model = 'openai:gpt-3.5-turbo'  # Faster model for routing
+        elif settings.ANTHROPIC_API_KEY:
+            model = 'anthropic:claude-3-haiku-20240307'  # Fast Anthropic model
+        else:
+            raise ValueError(
+                "No AI API key configured. Please set GOOGLE_API_KEY, OPENAI_API_KEY, or "
+                "ANTHROPIC_API_KEY in your .env file."
+            )
+        
         self.router_agent = Agent(
-            model='openai:gpt-3.5-turbo',  # Faster model for routing
+            model=model,
             output_type=UserIntent,
             system_prompt=self._get_router_prompt(),
             retries=1,
             name="intent_router"
         )
-        logger.info("IntentRouter initialized with GPT-3.5-turbo")
+        logger.info(f"IntentRouter initialized with {type(model).__name__ if hasattr(model, '__class__') else model}")
     
     def _get_router_prompt(self) -> str:
         """Get the system prompt for intent classification."""
@@ -72,7 +92,7 @@ CRITICAL: The following intent types are INVALID and must NEVER be used:
 7.  **`Change_Topic`**
     * **WHEN TO USE:** At ANY time, if the user clearly wants to abandon the current topic and start over with a new one.
     * **EXAMPLE:** "Actually, forget marketing, let's do a presentation on ancient history instead."
-    * **ACTION:** Extract the new topic into `extracted_info.new_topic`.
+    * **ACTION:** Extract the new topic and set extracted_info to the new topic string
 
 8.  **`Ask_Help_Or_Question`**
     * **WHEN TO USE:** At ANY time, if the user is asking a question about the process, or seems confused.
@@ -91,8 +111,10 @@ You must respond with a single JSON object that conforms to the `UserIntent` Pyd
 {
   "intent_type": "Accept_Plan",
   "confidence": 0.99,
-  "extracted_info": {}
-}"""
+  "extracted_info": null
+}
+
+Note: extracted_info should be null when no extra information needs to be extracted, or a string containing the extracted information (e.g., the new topic for Change_Topic)."""
     
     async def classify(self, user_message: str, context: Dict[str, Any]) -> UserIntent:
         """
@@ -115,7 +137,7 @@ You must respond with a single JSON object that conforms to the `UserIntent` Pyd
             # Run classification
             result = await self.router_agent.run(
                 prompt,
-                model_settings=ModelSettings(temperature=0.1, max_tokens=200)  # Lower temp for consistency
+                model_settings=ModelSettings(temperature=0.1, max_tokens=500)  # Increased for Gemini
             )
             
             intent = result.data
@@ -130,5 +152,5 @@ You must respond with a single JSON object that conforms to the `UserIntent` Pyd
             return UserIntent(
                 intent_type="Ask_Help_Or_Question",
                 confidence=0.5,
-                extracted_info={"error": str(e)}
+                extracted_info=None  # Changed to match new type
             )

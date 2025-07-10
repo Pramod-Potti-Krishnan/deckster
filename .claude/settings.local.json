@@ -24,7 +24,9 @@
       "WebFetch(domain:deckster-production.up.railway.app)",
       "Bash(curl:*)",
       "Bash(git add:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "WebFetch(domain:logfire.pydantic.dev)",
+      "Bash(pip install:*)"
     ],
     "deny": []
   }

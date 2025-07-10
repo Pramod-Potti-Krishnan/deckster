@@ -1,212 +1,46 @@
 # Core Framework
-aiofiles==24.1.0
-fastapi==0.115.14
-uvicorn[standard]==0.35.0
-websockets==15.0.1
+fastapi
+uvicorn[standard]
+websockets
+python-multipart
+aiofiles
 
-# Pydantic
-pydantic==2.11.7
-pydantic-settings==2.10.1
-pydantic-ai==0.3.5
-pydantic_core==2.33.2
+# Pydantic and Validation
+pydantic
+pydantic-settings
+pydantic-ai
 
 # Database and Storage
-supabase==2.16.0
-redis==6.2.0
-asyncpg==0.30.0
-pgvector==0.4.1
+supabase
+redis[hiredis]
+asyncpg
 
-# Authentication and Security
-python-jose[cryptography]==3.5.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.20
-slowapi==0.1.9
+# AI/ML Services
+openai
+anthropic
+google-generativeai
 
-# AI/ML - Core only
-openai==1.93.0
-anthropic==0.57.1
-
-# Workflow orchestration - CRITICAL
+# Workflow Orchestration
 langgraph
 langgraph-checkpoint
 
-# Essential utilities
-python-dotenv==1.1.1
-httpx==0.28.1
-anyio==4.9.0
+# Authentication and Security
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
 
-# Logging
-logfire==3.22.0
-logfire-api==3.22.0
+# HTTP and Networking
+httpx
+requests
 
-# File validation dependencies
-python-magic==0.4.27
-# python-magic-bin==0.4.14  # Windows only - not needed on Linux/Railway
-Pillow==11.3.0
+# Logging and Monitoring
+logfire
 
-# Required dependencies
-starlette==0.46.2
-typing-extensions==4.14.0
-certifi==2025.6.15
-charset-normalizer==3.4.2
-idna==3.10
-urllib3==2.5.0
-requests==2.32.4
-sniffio==1.3.1
-click==8.2.1
-h11==0.16.0
-httpcore==1.0.9
-pycparser==2.22
-cffi==1.17.1
-cryptography==45.0.5
-ecdsa==0.19.1
-pyasn1==0.6.1
-rsa==4.9.1
-six==1.17.0
-bcrypt==4.3.0
-PyJWT==2.10.1
+# Utilities
+typing-extensions
+python-dateutil
 
-# Additional production dependencies
-aiohappyeyeballs==2.6.1
-aiohttp==3.12.13
-aiosignal==1.4.0
-annotated-types==0.7.0
-attrs==25.3.0
-Authlib==1.6.0
-boto3==1.39.3
-botocore==1.39.3
-cachetools==5.5.2
-dataclasses-json==0.6.7
-Deprecated==1.2.18
-deprecation==2.1.0
-distro==1.9.0
-eval_type_backport==0.2.2
-executing==2.2.0
-frozenlist==1.7.0
-fsspec==2025.5.1
-google-auth==2.40.3
-googleapis-common-protos==1.70.0
-gotrue==2.12.2
-greenlet==3.2.3
-hiredis==3.2.1
-httptools==0.6.4
-httpx-sse==0.4.0
-importlib_metadata==8.7.0
-Jinja2==3.1.6
-jiter==0.10.0
-jmespath==1.0.1
-jsonpatch==1.33
-jsonpointer==3.0.0
-jsonschema==4.24.0
-jsonschema-specifications==2025.4.1
-limits==5.4.0
-markdown-it-py==3.0.0
-MarkupSafe==3.0.2
-marshmallow==3.26.1
-mdurl==0.1.2
-multidict==6.6.3
-numpy==2.3.1
-opentelemetry-api==1.34.1
-opentelemetry-exporter-otlp-proto-common==1.34.1
-opentelemetry-exporter-otlp-proto-http==1.34.1
-opentelemetry-instrumentation==0.55b1
-opentelemetry-proto==1.34.1
-opentelemetry-sdk==1.34.1
-opentelemetry-semantic-conventions==0.55b1
-orjson==3.10.18
-ormsgpack==1.10.0
-packaging==24.2
-pathspec==0.12.1
-postgrest==1.1.1
-prompt_toolkit==3.0.51
-propcache==0.3.2
-protobuf==5.29.5
-psutil==6.0.0
-pyasn1_modules==0.4.2
-pydantic-ai-slim==0.3.5
-Pygments==2.19.2
-python-dateutil==2.9.0.post0
-PyYAML==6.0.2
-realtime==2.5.3
-referencing==0.36.2
-regex==2024.11.6
-requests-toolbelt==1.0.0
-rich==14.0.0
-rpds-py==0.26.0
-s3transfer==0.13.0
-setuptools==80.9.0
-shellingham==1.5.4
-SQLAlchemy==2.0.41
-sse-starlette==2.3.6
-stevedore==5.4.1
-storage3==0.12.0
-StrEnum==0.4.15
-supafunc==0.10.1
-tenacity==8.5.0
-tiktoken==0.9.0
-tokenizers==0.21.2
-tqdm==4.67.1
-typer==0.16.0
-typing-inspect==0.9.0
-typing-inspection==0.4.1
-watchfiles==1.1.0
-wcwidth==0.2.13
-wheel==0.45.1
-wrapt==1.17.2
-xxhash==3.5.0
-yarl==1.20.1
-zipp==3.23.0
-zstandard==0.23.0
-
-# ========== DEVELOPMENT ONLY - Comment out for production ==========
-# pytest==8.4.1
-# pytest-asyncio==1.0.0
-# pytest-cov==6.2.1
-# pytest-mock==3.14.1
-# coverage==7.9.2
-# mypy==1.16.1
-# mypy_extensions==1.1.0
-# ruff==0.12.2
-# bandit==1.8.5
-# safety==3.2.9
-# safety-schemas==0.0.5
-# types-cffi==1.17.0.20250523
-# types-passlib==1.7.7.20250602
-# types-pyasn1==0.6.0.20250516
-# types-pyOpenSSL==24.1.0.20240722
-# types-python-jose==3.5.0.20250531
-# types-redis==4.6.0.20241004
-# types-requests==2.32.4.20250611
-# types-setuptools==80.9.0.20250529
-
-# ========== OPTIONAL/UNUSED - Can be removed ==========
-# argcomplete==3.6.2
-# colorama==0.4.6
-# cohere==5.15.0
-# dparse==0.6.4
-# fasta2a==0.3.5
-# fastavro==1.11.1
-# filelock==3.12.4
-# google-genai==1.24.0
-# griffe==1.7.3
-# groq==0.29.0
-# h2==4.2.0
-# hpack==4.1.0
-# huggingface-hub==0.33.2
-# hyperframe==6.1.0
-# iniconfig==2.1.0
-# langchain==0.3.26
-# langchain-anthropic==0.3.17
-# langchain-community==0.3.27
-# langchain-core==0.3.68
-# langchain-openai==0.3.27
-# langchain-text-splitters==0.3.8
-# langsmith==0.4.4
-# mcp==1.10.1
-# mistralai==1.9.1
-# pbr==6.1.1
-# pluggy==1.6.0
-# pydantic-evals==0.3.5
-# pydantic-graph==0.3.5
-# ruamel.yaml==0.18.14
-# ruamel.yaml.clib==0.2.12
+# Development/Testing (optional - uncomment if needed)
+# pytest
+# pytest-asyncio
+# pytest-cov

@@ -19,7 +19,9 @@ class UserIntent(BaseModel):
         "Ask_Help_Or_Question"            # → No state change
     ]
     confidence: float = Field(ge=0.0, le=1.0)
-    extracted_info: Dict[str, Any] = Field(default_factory=dict)
+    # Make it a simple optional string to avoid additionalProperties warning with Gemini
+    # The router can encode complex info as JSON string if needed
+    extracted_info: Optional[str] = Field(default=None)
 
 
 class StateContext(BaseModel):
@@ -38,11 +40,13 @@ class StateContext(BaseModel):
 
 class ClarifyingQuestions(BaseModel):
     """Output for ASK_CLARIFYING_QUESTIONS state."""
+    type: Literal["ClarifyingQuestions"] = "ClarifyingQuestions"
     questions: List[str] = Field(min_items=3, max_items=5)
 
 
 class ConfirmationPlan(BaseModel):
     """Output for CREATE_CONFIRMATION_PLAN state."""
+    type: Literal["ConfirmationPlan"] = "ConfirmationPlan"
     summary_of_user_request: str
     key_assumptions: List[str]
     proposed_slide_count: int = Field(ge=2, le=30)  # Allow as few as 2 slides for short presentations
@@ -107,6 +111,7 @@ class Slide(BaseModel):
 
 class PresentationStrawman(BaseModel):
     """Simplified presentation strawman structure."""
+    type: Literal["PresentationStrawman"] = "PresentationStrawman"
     # Core elements
     main_title: str
     overall_theme: str  # e.g., "Informative and data-driven"

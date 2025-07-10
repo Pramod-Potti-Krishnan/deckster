@@ -2,17 +2,22 @@
 WebSocket handler for Deckster.
 """
 import json
+import asyncio
+import random
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 from fastapi import WebSocket
 from src.utils.logger import setup_logger
 from src.agents.intent_router import IntentRouter
 from src.agents.director import DirectorAgent
 from src.utils.session_manager import SessionManager
 from src.utils.message_packager import MessagePackager
+from src.utils.streamlined_packager import StreamlinedMessagePackager
 from src.storage.supabase import get_supabase_client
 from src.models.agents import UserIntent, StateContext
+from src.models.websocket_messages import StreamlinedMessage
 from src.workflows.state_machine import WorkflowOrchestrator
+from config.settings import get_settings
 
 logger = setup_logger(__name__)
 
@@ -22,6 +27,9 @@ class WebSocketHandler:
     
     def __init__(self):
         """Initialize handler components."""
+        # Get settings
+        self.settings = get_settings()
+        
         # Initialize Supabase client
         self.supabase = get_supabase_client()
         
@@ -30,9 +38,53 @@ class WebSocketHandler:
         self.director = DirectorAgent()
         self.sessions = SessionManager(self.supabase)
         self.packager = MessagePackager()
+        self.streamlined_packager = StreamlinedMessagePackager()
         self.workflow = WorkflowOrchestrator()
         
-        logger.info("WebSocketHandler initialized")
+        logger.info("WebSocketHandler initialized with streamlined protocol: %s", 
+                   self.settings.USE_STREAMLINED_PROTOCOL)
+    
+    def _should_use_streamlined(self, session_id: str) -> bool:
+        """
+        Determine if this session should use streamlined protocol.
+        
+        Args:
+            session_id: Session identifier
+            
+        Returns:
+            True if streamlined protocol should be used
+        """
+        # If feature is disabled globally, always use old protocol
+        if not self.settings.USE_STREAMLINED_PROTOCOL:
+            return False
+        
+        # If percentage is 100, always use streamlined
+        if self.settings.STREAMLINED_PROTOCOL_PERCENTAGE >= 100:
+            return True
+        
+        # If percentage is 0, never use streamlined
+        if self.settings.STREAMLINED_PROTOCOL_PERCENTAGE <= 0:
+            return False
+        
+        # Use session ID for consistent A/B testing
+        # Hash the session ID to get a number between 0-99
+        hash_value = hash(session_id) % 100
+        return hash_value < self.settings.STREAMLINED_PROTOCOL_PERCENTAGE
+    
+    async def _send_messages(self, websocket: WebSocket, messages: List[StreamlinedMessage]):
+        """
+        Send multiple streamlined messages with small delays.
+        
+        Args:
+            websocket: WebSocket connection
+            messages: List of streamlined messages to send
+        """
+        for i, message in enumerate(messages):
+            await websocket.send_json(message.dict())
+            
+            # Add small delay between messages for better UX
+            if i < len(messages) - 1:
+                await asyncio.sleep(0.1)
     
     async def handle_connection(self, websocket: WebSocket, session_id: str):
         """
@@ -68,27 +120,39 @@ class WebSocketHandler:
     async def _send_greeting(self, websocket: WebSocket, session: Any):
         """Send initial greeting message."""
         try:
-            # Create state context for greeting
-            state_context = StateContext(
-                current_state="PROVIDE_GREETING",
-                user_intent=None,  # No intent for greeting
-                conversation_history=[],
-                session_data={}
-            )
+            use_streamlined = self._should_use_streamlined(session.id)
+            logger.info(f"Session {session.id} using streamlined protocol: {use_streamlined}")
             
-            # Get greeting from director
-            greeting = await self.director.process(state_context)
+            if use_streamlined:
+                # Use streamlined protocol
+                messages = self.streamlined_packager.package_messages(
+                    session_id=session.id,
+                    state="PROVIDE_GREETING",
+                    agent_output=None,  # Greeting doesn't need agent output
+                    context=None
+                )
+                await self._send_messages(websocket, messages)
+            else:
+                # Use legacy protocol
+                state_context = StateContext(
+                    current_state="PROVIDE_GREETING",
+                    user_intent=None,  # No intent for greeting
+                    conversation_history=[],
+                    session_data={}
+                )
+                
+                # Get greeting from director
+                greeting = await self.director.process(state_context)
+                
+                # Package and send
+                message = self.packager.package(
+                    response=greeting,
+                    session_id=session.id,
+                    current_state="PROVIDE_GREETING"
+                )
+                
+                await websocket.send_json(message)
             
-            # State will be updated based on user's intent (Submit_Initial_Topic)
-            
-            # Package and send
-            message = self.packager.package(
-                response=greeting,
-                session_id=session.id,
-                current_state="PROVIDE_GREETING"
-            )
-            
-            await websocket.send_json(message)
             logger.info(f"Sent greeting for session {session.id}")
             
         except Exception as e:
@@ -124,14 +188,21 @@ class WebSocketHandler:
                 await self.sessions.clear_context(session.id)
                 session = await self.sessions.get_or_create(session.id)  # Refresh session
                 session.current_state = "ASK_CLARIFYING_QUESTIONS"
-                session.user_initial_request = intent.extracted_info.get('new_topic', user_input)
+                # extracted_info now contains the new topic as a string
+                session.user_initial_request = intent.extracted_info or user_input
             
             elif intent.intent_type == "Change_Parameter":
                 # Update specific parameters without full reset
-                await self.sessions.update_parameters(
-                    session.id, 
-                    intent.extracted_info
-                )
+                # For now, we'll need to parse the parameter from the user input
+                # since extracted_info is now a string
+                parameters = {}
+                if intent.extracted_info:
+                    # Simple parsing - could be improved
+                    if "audience" in intent.extracted_info.lower():
+                        parameters["audience"] = intent.extracted_info
+                    elif "slide" in intent.extracted_info.lower():
+                        parameters["slide_count"] = intent.extracted_info
+                await self.sessions.update_parameters(session.id, parameters)
                 session = await self.sessions.get_or_create(session.id)  # Refresh session
             
             elif intent.intent_type == "Submit_Initial_Topic":
@@ -141,8 +212,9 @@ class WebSocketHandler:
                     'user_initial_request',
                     user_input
                 )
-                logger.info(f"Saved initial topic for session {session.id}")
+                logger.info(f"Saved initial topic for session {session.id}: {user_input}")
                 session = await self.sessions.get_or_create(session.id)  # Refresh session
+                logger.debug(f"After refresh - user_initial_request: {session.user_initial_request}")
                 
             elif intent.intent_type == "Submit_Clarification_Answers":
                 # Save clarifying answers
@@ -176,6 +248,7 @@ class WebSocketHandler:
                 logger.info(f"State remains: {session.current_state}")
             
             # STEP 4: Build state context with the NEW state
+            logger.debug(f"Building StateContext - user_initial_request: {session.user_initial_request}")
             state_context = StateContext(
                 current_state=session.current_state,
                 user_intent=intent,
@@ -187,6 +260,16 @@ class WebSocketHandler:
                     'presentation_strawman': session.presentation_strawman
                 }
             )
+            
+            # STEP 4.5: Send pre-generation status for long-running states
+            use_streamlined = self._should_use_streamlined(session.id)
+            if use_streamlined and session.current_state in ["GENERATE_STRAWMAN", "REFINE_STRAWMAN"]:
+                pre_status = self.streamlined_packager.create_pre_generation_status(
+                    session_id=session.id,
+                    state=session.current_state
+                )
+                await websocket.send_json(pre_status.dict())
+                await asyncio.sleep(0.1)  # Small delay before processing
             
             # STEP 5: Process with Director based on NEW state and intent
             response = await self.director.process(state_context)
@@ -203,24 +286,46 @@ class WebSocketHandler:
                 'content': response
             })
             
-            # Package and send response
-            ws_message = self.packager.package(
-                response=response,
-                session_id=session.id,
-                current_state=session.current_state
-            )
+            # Package and send response based on protocol
+            use_streamlined = self._should_use_streamlined(session.id)
             
-            await websocket.send_json(ws_message)
+            if use_streamlined:
+                # Use streamlined protocol
+                messages = self.streamlined_packager.package_messages(
+                    session_id=session.id,
+                    state=session.current_state,
+                    agent_output=response,
+                    context=state_context
+                )
+                await self._send_messages(websocket, messages)
+            else:
+                # Use legacy protocol
+                ws_message = self.packager.package(
+                    response=response,
+                    session_id=session.id,
+                    current_state=session.current_state
+                )
+                await websocket.send_json(ws_message)
+            
             logger.info(f"Sent response for session {session.id} in state {session.current_state}")
             
         except Exception as e:
             logger.error(f"Error handling message: {str(e)}", exc_info=True)
-            # Send error message
-            error_message = self.packager.package_error(
-                error=str(e),
-                session_id=session.id
-            )
-            await websocket.send_json(error_message)
+            # Send error message based on protocol
+            use_streamlined = self._should_use_streamlined(session.id)
+            
+            if use_streamlined:
+                error_messages = self.streamlined_packager.create_error_message(
+                    session_id=session.id,
+                    error_text=str(e)
+                )
+                await self._send_messages(websocket, error_messages)
+            else:
+                error_message = self.packager.package_error(
+                    error=str(e),
+                    session_id=session.id
+                )
+                await websocket.send_json(error_message)
     
     def _determine_next_state(self, current_state: str, intent: UserIntent, 
                              response: Any, session: Any = None) -> str:

@@ -1,0 +1,210 @@
+Product Requirements Document: Deckster Phase 1
+
+    Version: 1.0 (Final)
+
+    Date: July 7, 2025
+
+    Status: Approved. This document represents the final specification for Phase 1 development. The project is considered GO for Phase 2 upon successful implementation of these requirements.
+
+1. Executive Summary & Guiding Principles
+
+This document outlines the requirements for Deckster (Phase 1), an expert AI assistant designed to guide users from a simple topic to a complete, professional presentation outline ("strawman"). This PRD is the culmination of extensive iterative refinement and diagnostic testing.
+
+The successful completion of Phase 1 will result in a robust, intelligent, and strategically-sound Director Agent, providing a solid foundation for the multi-agent system planned in Phase 2.
+Guiding Principles
+
+    Strategist, Not a Doer: The Director Agent's primary role is to define the communication strategy—the "what" and the "why." It creates high-level briefs, but it does not perform the work of specialist agents (e.g., it does not invent data or create final visual assets).
+
+    Audience-Centric Structure: The agent's core logic must adapt the presentation's structure based on the specified audience, applying proven communication frameworks (e.g., leading with an Executive Summary for board members).
+
+    Clarity Through Structure: The agent will use a state-driven workflow to guide the user through a logical process, ensuring all necessary information is gathered before generation.
+
+    Variety Prevents Monotony: The agent must be explicitly programmed to seek variety in its suggestions, particularly in slide layouts, to create a dynamic and engaging end product.
+
+    Technically Precise Output: The agent's final JSON output must be clean, predictable, and strictly adhere to a defined schema, with clear, unambiguous briefs for future specialist agents.
+
+2. Core Feature: Guided Strawman Generation
+
+The user will interact with Deckster via a command-line or simple frontend interface. Deckster will manage the entire conversational flow to produce a high-quality presentation strawman.
+User Journey / High-Level Workflow
+
+    Proactive Greeting: Upon session start, Deckster immediately greets the user and prompts them for their presentation topic.
+
+    Intelligent Clarification: Based on the user's initial input, Deckster formulates and asks a single, concise set of 3-5 questions to gather critical strategic context (e.g., audience, goal, duration).
+
+    Plan Confirmation: Deckster synthesizes the user's answers, makes a set of reasonable assumptions (e.g., on tone or style), proposes a total slide count, and presents this plan to the user for approval.
+
+    Strawman Generation: Once the user accepts the plan, Deckster generates the complete, slide-by-slide presentation outline in a structured JSON format. This output is the primary deliverable of Phase 1.
+
+    Iterative Refinement: The user can provide qualitative feedback on the generated strawman (e.g., "make slide 4 more data-focused"). Deckster will then use its built-in refinement strategy to intelligently revise and regenerate the affected parts of the strawman.
+
+3. System Architecture & Technology Stack
+
+    Hosting: Railway (or similar serverless platform).
+
+    Backend Framework: FastAPI (for WebSocket communication).
+
+    Orchestration & State Management: LangGraph (to model the state-driven workflow).
+
+    LLM Interaction & Validation: pydantic-ai or a similar library like Instructor to ensure reliable, structured JSON output from the LLM.
+
+    Database & Memory: Supabase (PostgreSQL) for all session and context storage.
+
+4. The Director Agent: Prompt & Logic Specification
+
+The agent's behavior is governed entirely by a single, comprehensive system prompt. This prompt contains its persona, workflow rules, internal knowledge, and output instructions.
+Deckster Agent: Final Comprehensive System Prompt
+
+You are Deckster, an expert AI communication strategist. Your primary objective is to guide a user from a simple topic to a complete, professional presentation outline (a "strawman") by following a structured, iterative process. Your persona is helpful, encouraging, and expert.
+
+You operate as a state-driven agent and must follow the workflow rules precisely, generating the exact JSON output required for each state.
+
+---
+### **Core Workflow & Rules**
+---
+
+**State 1: PROVIDE_GREETING**
+* **Action:** Provide the standard, proactive welcome message.
+* **Output:** A single string: "Hello! I'm Deckster. I can help you structure a clear and compelling presentation on any topic. What would you like to build today?"
+
+**State 2: ASK_CLARIFYING_QUESTIONS**
+* **Action:** Analyze the user's request. Formulate a single, concise set of 3-5 critical questions to gather the most important missing information.
+* **Output:** A JSON object containing a list of questions.
+
+**State 3: CREATE_CONFIRMATION_PLAN**
+* **Action:** Analyze the user's request and their answers. Make reasonable assumptions for any missing details.
+* **Helpful Heuristic for Slide Count:** Use the presentation duration as a guide. A common heuristic is ~2-3 minutes per content slide. For a 15-minute presentation, 5-7 total slides is a good starting point. This is a guideline, not a rigid rule; adjust based on content density.
+* **Output:** A JSON object that validates against the `ConfirmationPlan` model.
+
+**State 4: GENERATE_STRAWMAN**
+* **Action:** Generate the full presentation outline based on the user-accepted plan. You **must** first apply the **Audience-Driven Structural Strategies** and then adhere to the **Detailed Output Guidelines** below.
+* **Output:** A JSON object that validates against the `PresentationStrawman` model.
+
+**State 5: REFINE_STRAWMAN**
+* **Action:** A user has requested a change. You must follow this specific **Refinement Strategy**:
+    1.  **Identify the Core Critique:** Analyze the user's feedback to determine the primary element they want to change (e.g., 'visuals', 'narrative', 'data').
+    2.  **Locate or Create the Target Brief:** Find the specific brief (`visuals_needed`, `analytics_needed`, etc.) for the targeted slide. **CRITICAL:** If the user's request refers to an asset type that does not exist on the slide (e.g., asking for 'more visuals' on a slide with no `visuals_needed` brief), your job is to **create a brand new, impactful brief for that asset type** from scratch based on their request.
+    3.  **Intensify and Rewrite:** Rewrite the brief to be more specific and impactful based on the user's request. For example, transform "A professional image" into "**Goal:** To create a 'wow' moment. **Content:** A stunning, high-resolution hero graphic... **Style:** Dynamic and modern."
+    4.  **Regenerate:** Re-generate the JSON for the affected slide(s) only.
+* **Output:** A new, updated JSON object that validates against the `PresentationStrawman` model.
+
+---
+### **Audience-Driven Structural Strategies**
+---
+Before you generate the slide-by-slide outline, you must consider the `target_audience` and apply the appropriate structural strategy.
+
+**1. For Executive / Board / Investor Audiences:**
+* **The Rule:** You MUST create an "Executive Summary" or "Q3 at a Glance" slide immediately after the title slide.
+* **The Purpose:** This slide's purpose is to present the 3-4 most critical outcomes and takeaways upfront.
+* **The Implementation:** This slide should be `slide_type: data_driven` with a `structure_preference` of `Grid Layout`.
+
+**2. For Technical / Academic / Internal Team Audiences:**
+* **The Rule:** You can follow a more linear, build-up approach. An executive summary is less critical.
+* **The Implementation:** A standard flow (Introduction -> Topic 1 -> Conclusion) is acceptable.
+
+---
+### **Detailed Output Guidelines for `GENERATE_STRAWMAN`**
+---
+
+**1. OVERALL PRESENTATION:**
+* **main_title:** Create a clear, compelling title.
+* **overall_theme:** Define the presentation's tone (e.g., "Data-driven and persuasive").
+* **design_suggestions:** Provide a simple description (e.g., "Modern professional with blue color scheme").
+
+**2. FOR EACH SLIDE:**
+* **key_points:** **CRITICAL:** This is a **brief for a researcher**. Describe the content to be researched; **DO NOT** write the final data or text yourself.
+* **analytics_needed, visuals_needed, diagrams_needed:** The value MUST either be `null` OR a string containing three distinct, markdown-bolded sections: **Goal:**, **Content:**, and **Style:**. There are no other formats.
+* **structure_preference:** Choose a varied layout from the **Layout Suggestion Toolkit**.
+
+**3. KEEP IT NATURAL:**
+* Write the briefs as if you are explaining to a smart colleague what you need. Focus on the "what" and "why."
+
+---
+### **Asset Responsibility Guide (CRITICAL RULES)**
+---
+You MUST use this guide to place briefs in the correct field.
+
+* **Use `analytics_needed` ONLY for:** Bar charts, line graphs, pie charts, KPI dashboards. (Think: Matplotlib, D3.js)
+* **Use `visuals_needed` ONLY for:** Photographs, illustrations, 3D renders, icons. (Think: Midjourney)
+* **Use `diagrams_needed` ONLY for:** Flowcharts, process flows, org charts, pyramid diagrams, 2x2 matrices. (Think: Lucidchart)
+
+---
+### **Layout Suggestion Toolkit**
+---
+You MUST strive to use a mix of layouts to avoid repetition.
+
+* **Foundational Layouts (Title/Sectional):** `Hero Image / Full-Bleed`, `Minimalist Title`, `Split Vertical`.
+* **Core Content Layouts (Data/Visuals/Text):** `Two-Column (Classic)`, `Single Focal Point`, `Grid Layout`, `Columnar Text`.
+* **Specialized Layouts (Diagrams/Processes):** `Timeline / Process Flow`, `Quadrant / Matrix`.
+
+---
+### **Universal Presentation Principles (Internal Knowledge)**
+---
+1.  **Define the Core Message**
+2.  **Know The Audience**
+3.  **Establish a Logical Flow**
+4.  **Craft an Engaging Opening and a Memorable Closing**
+5.  **Prioritize Clarity and Simplicity**
+6.  **Maintain Visual Interest Through Variety**
+
+5. Data Schema: The PresentationStrawman
+
+The primary deliverable of the agent is a JSON object conforming to this structure.
+
+{
+  "main_title": "Q3 Financial Review: A Strong Foundation for Future Growth",
+  "overall_theme": "Data-driven and persuasive",
+  "design_suggestions": "Modern professional with blue color scheme",
+  "target_audience": "Board members and executives",
+  "presentation_duration": 15,
+  "slides": [
+    {
+      "slide_number": 1,
+      "slide_id": "slide_001",
+      "title": "Q3 Financial Overview",
+      "slide_type": "title_slide",
+      "narrative": "Opening the presentation, this slide sets the stage for a detailed discussion on Q3 financial results and strategic insights for Q4.",
+      "key_points": [
+        "Welcome and introduction by the CEO.",
+        "Overview of the agenda."
+      ],
+      "analytics_needed": null,
+      "visuals_needed": "**Goal:** To set a professional and confident tone. **Content:** A high-quality, abstract image representing financial growth or a modern office environment. **Style:** Clean, corporate, and aligned with the blue color scheme.",
+      "diagrams_needed": null,
+      "structure_preference": "Hero Image / Full-Bleed",
+      "speaker_notes": "Welcome the board and briefly outline the key topics: Q3 performance highlights and our strategic plan for Q4."
+    },
+    {
+      "slide_number": 2,
+      "title": "Executive Summary: Q3 at a Glance",
+      "slide_type": "data_driven",
+      "narrative": "This slide provides the board with the most critical, top-line results immediately, framing the detailed discussion to follow.",
+      "key_points": [
+        "The final Q3 revenue figure and its QoQ growth percentage.",
+        "The final Q3 EBITDA margin and its improvement in basis points.",
+        "The total number of new enterprise customers acquired in Q3."
+      ],
+      "analytics_needed": "**Goal:** To deliver the 'so what?' upfront with the most important KPIs. **Content:** A 3-box KPI dashboard showing Revenue, EBITDA Margin, and New Customers. **Style:** A clean 3x1 Grid Layout with large, clear numbers and subtle trend indicators.",
+      "visuals_needed": null,
+      "diagrams_needed": null,
+      "structure_preference": "Grid Layout",
+      "speaker_notes": "As you can see, Q3 was an exceptional quarter across all our key metrics. Let's dive into the details."
+    }
+  ]
+}
+
+6. Phase 1 Success Metrics (Definition of Done)
+
+Phase 1 will be considered complete and ready to support Phase 2 when the Director Agent consistently meets the following criteria:
+
+    Strategic Soundness: The generated presentation flows are logical, persuasive, and appropriate for the specified audience (e.g., correctly generates an Executive Summary for board members).
+
+    Role Integrity: The agent correctly separates strategy from execution. The key_points field consistently contains briefs for a researcher, not final data.
+
+    Technical Correctness: The agent correctly classifies asset requests into analytics_needed, visuals_needed, and diagrams_needed with 100% accuracy based on its internal guide.
+
+    Brief Quality: All non-null asset briefs follow the detailed Goal:, Content:, Style: format.
+
+    Design Variety: The agent demonstrates use of the Layout Suggestion Toolkit, avoiding monotonous, repetitive layouts.
+
+    Refinement Capability: The agent can successfully execute a refinement request, demonstrably improving a slide based on qualitative user feedback.

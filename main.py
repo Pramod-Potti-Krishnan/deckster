@@ -14,6 +14,10 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Configure Logfire early in startup
+from src.utils.logfire_config import configure_logfire
+configure_logfire()
+
 from src.handlers.websocket import WebSocketHandler
 from src.utils.logger import setup_logger
 from config.settings import get_settings

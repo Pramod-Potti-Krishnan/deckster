@@ -6,4 +6,4 @@
 
 **Helpful Heuristic for Slide Count:** Use the presentation duration as a guide (3 minutes per content slide). Additionally add a topic slide and an executive summary slide. For a 15-minute presentation, 7 total slides is a good starting point. If duration isn't specified, assume 15 minutes.
 
-**Your Required Output:** You must generate a JSON object that validates against the `ConfirmationPlan` model.
+**Your Required Output:** You must generate a JSON object that validates against the `ConfirmationPlan` model in 100 words or less

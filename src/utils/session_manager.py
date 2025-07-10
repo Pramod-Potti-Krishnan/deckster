@@ -36,6 +36,7 @@ class SessionManager:
         """
         # Check cache first
         if session_id in self.cache:
+            logger.debug(f"Returning cached session {session_id}")
             return self.cache[session_id]
         
         # Try to fetch from Supabase
@@ -45,9 +46,11 @@ class SessionManager:
             if result.data:
                 # Session exists
                 session_data = result.data[0]
+                logger.debug(f"Session data from DB: {session_data}")
                 session = Session(**session_data)
                 self.cache[session_id] = session
                 logger.info(f"Retrieved existing session {session_id}")
+                logger.debug(f"Session user_initial_request: {session.user_initial_request}")
                 return session
         except Exception as e:
             logger.warning(f"Error fetching session {session_id}: {str(e)}")
@@ -100,6 +103,12 @@ class SessionManager:
                 'updated_at': session.updated_at.isoformat()
             }).eq('id', session_id).execute()
             logger.info(f"Updated session {session_id} state to {state}")
+            
+            # Force refresh from database to ensure cache consistency
+            if session_id in self.cache:
+                del self.cache[session_id]
+                logger.debug(f"Cleared cache for session {session_id} after state update")
+                
         except Exception as e:
             logger.error(f"Error updating session state: {str(e)}")
     
@@ -194,6 +203,12 @@ class SessionManager:
             
             self.supabase.table(self.table_name).update(updates).eq('id', session_id).execute()
             logger.info(f"Updated parameters for session {session_id}")
+            
+            # Force refresh from database to ensure cache consistency
+            if session_id in self.cache:
+                del self.cache[session_id]
+                logger.debug(f"Cleared cache for session {session_id} after parameter update")
+                
         except Exception as e:
             logger.error(f"Error updating session parameters: {str(e)}")
     
@@ -220,5 +235,12 @@ class SessionManager:
                     'updated_at': session.updated_at.isoformat()
                 }).eq('id', session_id).execute()
                 logger.info(f"Saved {field} for session {session_id}")
+                
+                # Force refresh from database to ensure cache consistency
+                # Remove from cache to force fresh read
+                if session_id in self.cache:
+                    del self.cache[session_id]
+                    logger.debug(f"Cleared cache for session {session_id} after save")
+                    
             except Exception as e:
                 logger.error(f"Error saving session data: {str(e)}")
