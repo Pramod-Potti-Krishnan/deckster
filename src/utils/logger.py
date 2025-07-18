@@ -89,37 +89,64 @@ class LogfireLogger:
         pass
 
 
-class NoOpLogger:
-    """No-op logger when Logfire is not configured."""
+class StandardLogger:
+    """Standard Python logger when Logfire is not configured."""
     
     def __init__(self, name: str):
-        self.name = name
+        import logging
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.DEBUG)
+        
+        # Add console handler if not already present
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
     
-    def info(self, *args, **kwargs): pass
-    def warn(self, *args, **kwargs): pass
-    def warning(self, *args, **kwargs): pass
-    def error(self, *args, **kwargs): pass
-    def debug(self, *args, **kwargs): pass
-    def critical(self, *args, **kwargs): pass
-    def exception(self, *args, **kwargs): pass
-    def setLevel(self, level): pass
+    def info(self, message, *args, **kwargs):
+        self.logger.info(message, *args, **{k: v for k, v in kwargs.items() if k != 'exc_info'})
+    
+    def warn(self, message, *args, **kwargs):
+        self.logger.warning(message, *args, **{k: v for k, v in kwargs.items() if k != 'exc_info'})
+    
+    def warning(self, message, *args, **kwargs):
+        self.logger.warning(message, *args, **{k: v for k, v in kwargs.items() if k != 'exc_info'})
+    
+    def error(self, message, *args, **kwargs):
+        exc_info = kwargs.pop('exc_info', False)
+        self.logger.error(message, *args, exc_info=exc_info, **kwargs)
+    
+    def debug(self, message, *args, **kwargs):
+        self.logger.debug(message, *args, **{k: v for k, v in kwargs.items() if k != 'exc_info'})
+    
+    def critical(self, message, *args, **kwargs):
+        self.logger.critical(message, *args, **{k: v for k, v in kwargs.items() if k != 'exc_info'})
+    
+    def exception(self, message, *args, **kwargs):
+        self.logger.exception(message, *args, **{k: v for k, v in kwargs.items() if k != 'exc_info'})
+    
+    def setLevel(self, level):
+        self.logger.setLevel(level)
 
 
 def setup_logger(name: str, level: Optional[str] = None):
     """
-    Set up a logger using Logfire or no-op if not configured.
+    Set up a logger using Logfire or standard Python logging if not configured.
     
     Args:
         name: Logger name (usually __name__)
-        level: Logging level (ignored for Logfire)
+        level: Logging level (used for standard logger)
         
     Returns:
-        LogfireLogger or NoOpLogger instance
+        LogfireLogger or StandardLogger instance
     """
     if LOGFIRE_CONFIGURED:
         return LogfireLogger(name)
     else:
-        return NoOpLogger(name)
+        return StandardLogger(name)
 
 
 # Create a default logger for the package

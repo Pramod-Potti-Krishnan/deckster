@@ -98,6 +98,9 @@ class BaseMessage(BaseModel):
     
     class Config:
         use_enum_values = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 
 class ChatMessage(BaseMessage):

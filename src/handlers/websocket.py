@@ -1,25 +1,38 @@
 """
 WebSocket handler for Deckster.
 """
+print("[DEBUG] Starting websocket.py imports")
 import json
 import asyncio
 import random
 from datetime import datetime
 from typing import Dict, Any, List
 from fastapi import WebSocket
+
+print("[DEBUG] Importing logger")
 from src.utils.logger import setup_logger
+
+print("[DEBUG] Importing agents")
 from src.agents.intent_router import IntentRouter
 from src.agents.director import DirectorAgent
+
+print("[DEBUG] Importing utils")
 from src.utils.session_manager import SessionManager
 from src.utils.message_packager import MessagePackager
 from src.utils.streamlined_packager import StreamlinedMessagePackager
+
+print("[DEBUG] Importing storage and models")
 from src.storage.supabase import get_supabase_client
 from src.models.agents import UserIntent, StateContext
 from src.models.websocket_messages import StreamlinedMessage
+
+print("[DEBUG] Importing workflows and settings")
 from src.workflows.state_machine import WorkflowOrchestrator
 from config.settings import get_settings
 
+print("[DEBUG] Setting up logger")
 logger = setup_logger(__name__)
+print("[DEBUG] websocket.py imports complete")
 
 
 class WebSocketHandler:
@@ -27,21 +40,50 @@ class WebSocketHandler:
     
     def __init__(self):
         """Initialize handler components."""
+        print("[DEBUG WebSocketHandler] Starting __init__")
+        logger.info("Initializing WebSocketHandler...")
+        
         # Get settings
+        print("[DEBUG WebSocketHandler] Getting settings")
         self.settings = get_settings()
+        print(f"[DEBUG WebSocketHandler] Settings loaded: streamlined={self.settings.USE_STREAMLINED_PROTOCOL}")
+        logger.info(f"Settings loaded: streamlined={self.settings.USE_STREAMLINED_PROTOCOL}, percentage={self.settings.STREAMLINED_PROTOCOL_PERCENTAGE}")
         
         # Initialize Supabase client
-        self.supabase = get_supabase_client()
+        print("[DEBUG WebSocketHandler] Initializing Supabase client")
+        try:
+            self.supabase = get_supabase_client()
+            print("[DEBUG WebSocketHandler] Supabase client created")
+            logger.info("Supabase client initialized successfully")
+        except Exception as e:
+            print(f"[DEBUG WebSocketHandler] Failed to initialize Supabase: {str(e)}")
+            logger.error(f"Failed to initialize Supabase client: {str(e)}", exc_info=True)
+            raise
         
         # Initialize components
+        print("[DEBUG WebSocketHandler] Initializing components")
+        logger.info("Initializing handler components...")
+        
+        print("[DEBUG WebSocketHandler] Creating IntentRouter")
         self.intent_router = IntentRouter()
+        
+        print("[DEBUG WebSocketHandler] Creating DirectorAgent")
         self.director = DirectorAgent()
+        
+        print("[DEBUG WebSocketHandler] Creating SessionManager")
         self.sessions = SessionManager(self.supabase)
+        
+        print("[DEBUG WebSocketHandler] Creating MessagePackager")
         self.packager = MessagePackager()
+        
+        print("[DEBUG WebSocketHandler] Creating StreamlinedMessagePackager")
         self.streamlined_packager = StreamlinedMessagePackager()
+        
+        print("[DEBUG WebSocketHandler] Creating WorkflowOrchestrator")
         self.workflow = WorkflowOrchestrator()
         
-        logger.info("WebSocketHandler initialized with streamlined protocol: %s", 
+        print("[DEBUG WebSocketHandler] All components initialized")
+        logger.info("WebSocketHandler initialized successfully with streamlined protocol: %s", 
                    self.settings.USE_STREAMLINED_PROTOCOL)
     
     def _should_use_streamlined(self, session_id: str) -> bool:
@@ -80,57 +122,103 @@ class WebSocketHandler:
             messages: List of streamlined messages to send
         """
         for i, message in enumerate(messages):
-            await websocket.send_json(message.dict())
+            # Use model_dump with mode='json' for proper serialization
+            message_data = message.model_dump(mode='json')
+            logger.debug(f"Sending message {i+1}/{len(messages)}: {message_data.get('type')}")
+            await websocket.send_json(message_data)
             
             # Add small delay between messages for better UX
             if i < len(messages) - 1:
                 await asyncio.sleep(0.1)
     
-    async def handle_connection(self, websocket: WebSocket, session_id: str):
+    async def handle_connection(self, websocket: WebSocket, session_id: str, user_id: str):
         """
         Handle a WebSocket connection for a session.
         
         Args:
             websocket: The WebSocket connection
             session_id: The session ID from query parameter
+            user_id: The user ID from query parameter
         """
+        print(f"[DEBUG handle_connection] Started with session_id={session_id}, user_id={user_id}")
+        
         try:
-            # Get or create session
-            session = await self.sessions.get_or_create(session_id)
-            logger.info(f"Session {session_id} initialized with state: {session.current_state}")
+            # Store user_id for use in other methods
+            self.current_user_id = user_id
+            print(f"[DEBUG handle_connection] Set current_user_id={self.current_user_id}")
+        
+            print("[DEBUG handle_connection] About to log info message")
+            logger.info(f"Starting handle_connection for user: {user_id}, session: {session_id}")
+            print("[DEBUG handle_connection] Logger info called successfully")
+            
+            # Get or create session with user_id
+            print("[DEBUG handle_connection] About to get_or_create session")
+            try:
+                session = await self.sessions.get_or_create(session_id, user_id)
+                print(f"[DEBUG handle_connection] Session created/retrieved: state={session.current_state}")
+                logger.info(f"Session {session_id} initialized for user {user_id} with state: {session.current_state}")
+            except Exception as session_error:
+                print(f"[DEBUG handle_connection] Session error: {str(session_error)}")
+                logger.error(f"Failed to create/get session {session_id} for user {user_id}: {str(session_error)}", exc_info=True)
+                raise  # Re-raise the exception to properly handle the error
             
             # Send initial greeting if new session
             if session.current_state == "PROVIDE_GREETING":
-                await self._send_greeting(websocket, session)
+                logger.info(f"Session {session_id} is new, sending greeting")
+                try:
+                    await self._send_greeting(websocket, session)
+                    logger.info(f"Greeting sent successfully for session {session_id}")
+                except Exception as greeting_error:
+                    logger.error(f"Failed to send greeting for session {session_id}: {str(greeting_error)}", exc_info=True)
+                    raise
+            else:
+                logger.info(f"Session {session_id} already in state: {session.current_state}, no greeting needed")
             
             # Main message loop
+            logger.info(f"Entering message loop for session {session_id}")
             while True:
                 # Receive message
+                logger.debug(f"Waiting for message from session {session_id}")
                 data = await websocket.receive_text()
+                logger.debug(f"Received raw data: {data[:100]}...")  # First 100 chars
                 message = json.loads(data)
-                logger.debug(f"Received message for session {session_id}: {message.get('type')}")
+                logger.info(f"Received message for session {session_id}: type={message.get('type')}, data keys={list(message.get('data', {}).keys())}")
                 
                 # Process message
                 await self._handle_message(websocket, session, message)
                 
         except Exception as e:
+            print(f"[DEBUG handle_connection] Inner exception: {str(e)}")
             logger.error(f"Error in WebSocket handler for session {session_id}: {str(e)}", exc_info=True)
-            await websocket.close()
+            # Don't try to close if already disconnected
+            if websocket.client_state.value <= 2:  # CONNECTING=0, CONNECTED=1, DISCONNECTED=2
+                try:
+                    await websocket.close()
+                except Exception:
+                    pass  # Ignore errors when closing
+        except Exception as outer_e:
+            print(f"[DEBUG handle_connection] OUTER EXCEPTION: {str(outer_e)}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     async def _send_greeting(self, websocket: WebSocket, session: Any):
         """Send initial greeting message."""
+        logger.info(f"Starting _send_greeting for session {session.id}")
         try:
             use_streamlined = self._should_use_streamlined(session.id)
             logger.info(f"Session {session.id} using streamlined protocol: {use_streamlined}")
             
             if use_streamlined:
                 # Use streamlined protocol
+                logger.info(f"Packaging greeting messages for session {session.id}")
                 messages = self.streamlined_packager.package_messages(
                     session_id=session.id,
                     state="PROVIDE_GREETING",
                     agent_output=None,  # Greeting doesn't need agent output
                     context=None
                 )
+                logger.info(f"Packaged {len(messages)} messages for greeting")
                 await self._send_messages(websocket, messages)
             else:
                 # Use legacy protocol
@@ -156,7 +244,9 @@ class WebSocketHandler:
             logger.info(f"Sent greeting for session {session.id}")
             
         except Exception as e:
-            logger.error(f"Error sending greeting: {str(e)}")
+            logger.error(f"Error sending greeting: {str(e)}", exc_info=True)
+            # Re-raise to ensure connection handler knows about the failure
+            raise
     
     async def _handle_message(self, websocket: WebSocket, session: Any, message: Dict[str, Any]):
         """
@@ -168,6 +258,9 @@ class WebSocketHandler:
             message: The incoming message
         """
         try:
+            # Validate we have user_id
+            if not hasattr(self, 'current_user_id') or not self.current_user_id:
+                raise RuntimeError("User ID not set in handler - connection not properly initialized")
             # Extract user input
             user_input = message.get('data', {}).get('text', '')
             
@@ -185,8 +278,8 @@ class WebSocketHandler:
             # STEP 2: Handle intent-based actions
             if intent.intent_type == "Change_Topic":
                 # Clear context and reset to questions
-                await self.sessions.clear_context(session.id)
-                session = await self.sessions.get_or_create(session.id)  # Refresh session
+                await self.sessions.clear_context(session.id, self.current_user_id)
+                session = await self.sessions.get_or_create(session.id, self.current_user_id)  # Refresh session
                 session.current_state = "ASK_CLARIFYING_QUESTIONS"
                 # extracted_info now contains the new topic as a string
                 session.user_initial_request = intent.extracted_info or user_input
@@ -202,24 +295,26 @@ class WebSocketHandler:
                         parameters["audience"] = intent.extracted_info
                     elif "slide" in intent.extracted_info.lower():
                         parameters["slide_count"] = intent.extracted_info
-                await self.sessions.update_parameters(session.id, parameters)
-                session = await self.sessions.get_or_create(session.id)  # Refresh session
+                await self.sessions.update_parameters(session.id, self.current_user_id, parameters)
+                session = await self.sessions.get_or_create(session.id, self.current_user_id)  # Refresh session
             
             elif intent.intent_type == "Submit_Initial_Topic":
                 # Save the initial topic
                 await self.sessions.save_session_data(
                     session.id,
+                    self.current_user_id,
                     'user_initial_request',
                     user_input
                 )
                 logger.info(f"Saved initial topic for session {session.id}: {user_input}")
-                session = await self.sessions.get_or_create(session.id)  # Refresh session
+                session = await self.sessions.get_or_create(session.id, self.current_user_id)  # Refresh session
                 logger.debug(f"After refresh - user_initial_request: {session.user_initial_request}")
                 
             elif intent.intent_type == "Submit_Clarification_Answers":
                 # Save clarifying answers
                 await self.sessions.save_session_data(
                     session.id,
+                    self.current_user_id,
                     'clarifying_answers',
                     {
                         "raw_answers": user_input,
@@ -227,7 +322,7 @@ class WebSocketHandler:
                     }
                 )
                 logger.info(f"Saved clarifying answers for session {session.id}")
-                session = await self.sessions.get_or_create(session.id)  # Refresh session
+                session = await self.sessions.get_or_create(session.id, self.current_user_id)  # Refresh session
             
             # STEP 3: Determine next state BEFORE processing (for intent-based routing)
             logger.info(f"Determining next state: current={session.current_state}, intent={intent.intent_type}")
@@ -242,7 +337,7 @@ class WebSocketHandler:
             # Update state if it changed
             if next_state != session.current_state:
                 logger.info(f"Pre-processing state change: {session.current_state} -> {next_state}")
-                await self.sessions.update_state(session.id, next_state)
+                await self.sessions.update_state(session.id, self.current_user_id, next_state)
                 session.current_state = next_state
             else:
                 logger.info(f"State remains: {session.current_state}")
@@ -268,19 +363,19 @@ class WebSocketHandler:
                     session_id=session.id,
                     state=session.current_state
                 )
-                await websocket.send_json(pre_status.dict())
+                await websocket.send_json(pre_status.model_dump(mode='json'))
                 await asyncio.sleep(0.1)  # Small delay before processing
             
             # STEP 5: Process with Director based on NEW state and intent
             response = await self.director.process(state_context)
             
             # Store in history
-            await self.sessions.add_to_history(session.id, {
+            await self.sessions.add_to_history(session.id, self.current_user_id, {
                 'role': 'user',
                 'content': user_input,
                 'intent': intent.dict()
             })
-            await self.sessions.add_to_history(session.id, {
+            await self.sessions.add_to_history(session.id, self.current_user_id, {
                 'role': 'assistant',
                 'state': session.current_state,
                 'content': response

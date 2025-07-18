@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class Session(BaseModel):
     """Session model matching Supabase schema."""
     id: str
+    user_id: str  # Required field for user identification
     current_state: Literal[
         "PROVIDE_GREETING", 
         "ASK_CLARIFYING_QUESTIONS", 

@@ -15,9 +15,8 @@ Deckster is an intelligent presentation generation platform that uses AI agents 
 ### Prerequisites
 
 - Python 3.11.9
-- PostgreSQL (or Supabase account)
-- Redis
-- Anthropic API key
+- Supabase account (REQUIRED - Get free account at https://supabase.com)
+- At least one AI API key (Google AI, OpenAI, or Anthropic)
 
 ### Installation
 
@@ -38,13 +37,21 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
+4. Set up Supabase:
+   - Create a free account at https://supabase.com
+   - Create a new project
+   - Go to Settings > API
+   - Copy your Project URL and anon/public key
+
+5. Set up environment variables:
 ```bash
 cp .env.example .env
-# Edit .env with your configuration
+# Edit .env and add your Supabase credentials:
+# SUPABASE_URL=https://your-project.supabase.co
+# SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
-5. Run the application:
+6. Run the application:
 ```bash
 uvicorn main:app --reload --port 8000
 ```

@@ -1,0 +1,114 @@
+{
+  "validation_rules": {
+    "min_questions": 3,
+    "max_questions": 7,
+    "min_slides": 5,
+    "max_slides": 20,
+    "required_slide_fields": [
+      "slide_id",
+      "slide_number",
+      "slide_type",
+      "title",
+      "narrative",
+      "key_points"
+    ],
+    "important_slide_fields": [
+      "analytics_needed",
+      "visuals_needed",
+      "diagrams_needed",
+      "structure_preference"
+    ]
+  },
+  "scenarios": {
+    "default": {
+      "name": "AI in Healthcare",
+      "description": "Standard presentation about AI applications in healthcare",
+      "expected_slides": 10,
+      "expected_structure": ["title", "agenda", "content", "content", "content", "content", "content", "content", "conclusion", "thank_you"],
+      "responses": {
+        "initial_topic": "I need a presentation about AI in healthcare, focusing on diagnostic applications and patient outcomes.",
+        "clarifying_answers": [
+          "The audience will be healthcare professionals at a medical conference",
+          "They have basic understanding of AI but want practical applications",
+          "The presentation should be about 20 minutes long",
+          "Focus on recent case studies and real-world implementations",
+          "Include both benefits and challenges"
+        ],
+        "plan_response": "Yes, this looks good. Please proceed with creating the presentation.",
+        "refinement_request": "Can you add more details about regulatory considerations and data privacy in the implementation section?"
+      }
+    },
+    "executive": {
+      "name": "Q3 Financial Results",
+      "description": "Board presentation on quarterly financial performance",
+      "expected_slides": 12,
+      "expected_structure": ["title", "agenda", "content", "content", "content", "content", "content", "content", "content", "content", "conclusion", "thank_you"],
+      "responses": {
+        "initial_topic": "I need to present our Q3 financial results to the board, highlighting revenue growth and market expansion.",
+        "clarifying_answers": [
+          "The audience is our board of directors and senior executives",
+          "They want to see YoY growth, market share, and strategic initiatives",
+          "15-minute presentation with 10 minutes for Q&A",
+          "Focus on positive trends but be transparent about challenges",
+          "Include competitive analysis and forward-looking statements"
+        ],
+        "plan_response": "Perfect, let's create this financial presentation.",
+        "refinement_request": "Please add a slide comparing our performance to key competitors and market benchmarks."
+      }
+    },
+    "technical": {
+      "name": "Microservices Architecture",
+      "description": "Technical presentation for engineering team",
+      "expected_slides": 15,
+      "expected_structure": ["title", "agenda", "content", "content", "content", "content", "content", "content", "content", "content", "content", "content", "content", "conclusion", "thank_you"],
+      "responses": {
+        "initial_topic": "I need to explain our migration from monolithic to microservices architecture to the engineering team.",
+        "clarifying_answers": [
+          "The audience is our senior and mid-level engineers",
+          "They understand distributed systems but need specifics on our approach",
+          "30-minute deep dive with technical details",
+          "Include architecture diagrams, technology stack, and migration timeline",
+          "Cover both technical benefits and operational challenges"
+        ],
+        "plan_response": "Great outline. Let's build this technical presentation.",
+        "refinement_request": "Can you add more details about the CI/CD pipeline changes and testing strategies for microservices?"
+      }
+    },
+    "educational": {
+      "name": "Climate Change Basics",
+      "description": "Educational presentation for high school students",
+      "expected_slides": 8,
+      "expected_structure": ["title", "agenda", "content", "content", "content", "content", "conclusion", "thank_you"],
+      "responses": {
+        "initial_topic": "I need an engaging presentation about climate change basics for high school students.",
+        "clarifying_answers": [
+          "The audience is 10th-grade science students",
+          "They have basic science knowledge but limited climate science background",
+          "25-minute class presentation",
+          "Make it visual and interactive with real-world examples",
+          "Include actions students can take"
+        ],
+        "plan_response": "This educational approach looks great. Please proceed.",
+        "refinement_request": "Could you add more interactive elements and discussion questions to engage the students?"
+      }
+    },
+    "sales": {
+      "name": "Product Launch",
+      "description": "Sales presentation for new SaaS product",
+      "expected_slides": 10,
+      "expected_structure": ["title", "agenda", "content", "content", "content", "content", "content", "content", "conclusion", "thank_you"],
+      "responses": {
+        "initial_topic": "I need a compelling sales presentation for our new project management SaaS product launch.",
+        "clarifying_answers": [
+          "The audience is potential enterprise customers and partners",
+          "They are decision-makers looking for ROI and competitive advantages",
+          "20-minute pitch with demo time",
+          "Emphasize unique features, pricing, and customer success stories",
+          "Include comparison with current market leaders"
+        ],
+        "plan_response": "Excellent plan for the sales presentation. Let's create it.",
+        "refinement_request": "Please add more emphasis on our unique AI-powered features and integration capabilities."
+      }
+    }
+  }
+}

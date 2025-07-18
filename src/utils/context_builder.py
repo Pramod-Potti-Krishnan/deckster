@@ -159,7 +159,6 @@ class ContextBuilder:
             "GENERATE_STRAWMAN": GenerateStrawmanStrategy(),
             "REFINE_STRAWMAN": RefineStrawmanStrategy()
         }
-        self.prompt_manager = None  # Will be set by DirectorAgent if modular
     
     def build_context(
         self, 
@@ -186,28 +185,6 @@ class ContextBuilder:
         
         return context, prompt
     
-    def build_system_prompt(self, state: str) -> str:
-        """Build state-specific system prompt for modular approach"""
-        if not self.prompt_manager:
-            raise ValueError("PromptManager not configured for modular prompts")
-        
-        return self.prompt_manager.get_modular_prompt(state)
-    
-    def build_context_with_modular_prompt(
-        self, 
-        state: str, 
-        session_data: Dict[str, Any],
-        user_intent: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Dict[str, Any], str, str]:
-        """Build context and return both user and system prompts"""
-        
-        # Get minimal context as before
-        context, user_prompt = self.build_context(state, session_data, user_intent)
-        
-        # Get state-specific system prompt
-        system_prompt = self.build_system_prompt(state)
-        
-        return context, user_prompt, system_prompt
     
     def _generate_prompt(self, state: str, context: Dict[str, Any]) -> str:
         """Generate state-specific prompts with minimal context"""

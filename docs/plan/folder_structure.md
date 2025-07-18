@@ -1,93 +1,137 @@
 # Project Folder Structure
 
 ## Overview
-Simple, intuitive folder organization for the presentation generator project.
+Current folder organization for the Deckster presentation generator project (Phase 1).
 
 ```
-deckster.xyz-ver-4/
+deckster/
 │
-├── 📁 .claude/                   # claude commands folder
-|    └── 📁 commands/             # Claude commands stored as .md files in this folder
+├── 📁 .claude/                      # Claude AI configuration
+│   ├── 📁 commands/                 # Claude command files (.md)
+│   │   ├── 📄 README.md
+│   │   ├── 📄 build-agent-architecture.md
+│   │   ├── 📄 deploy-fixes.md
+│   │   ├── 📄 execute-prp.md
+│   │   └── 📄 generate-prp.md
+│   └── 📄 settings.local.json       # Local Claude settings
 │
-├── 📁 examples/                   # Any examples or reference files stored here
-|
-├── 📁 docs/                   # All documentation
-│   ├── 📁 plan/               # All planing documentation               
-│   |   ├── 📄 README.md           # Project overview & getting started
-│   |   ├── 📄 PRD_Phase1.md       # Phase 1 requirements
-│   |   ├── 📄 PRD_Phase2.md       # Phase 2 requirements
-│   |   ├── 📄 PRD_Phase3.md       # Phase 3 requirements
-│   |   ├── 📄 PRD_Phase4.md       # Phase 4 requirements
-│   |   ├── 📄 comms_protocol.md   # Communication templates
-│   |   ├── 📄 tech_stack.md       # Technology guide
-│   |   └── 📄 security.md         # Security requirements
-│   ├── 📁 PRPs/                   # Product Requirement Prompts               
-│   |   ├── 📁 templates/          # PRP templates folder 
-|   |   |    └──📄 prp_base.md     # PRP base template document
-│   |   └── 📄 phase1-websocket-director-api.md/  # PRP for phase 1 of development  
-|   └── 📁 Learnings/              # Folder to document learnings in the future      
-|      
-├── 📁 src/                     # Source code
-│   ├── 📁 agents/             # AI agents
+├── 📁 .railway/                     # Railway deployment configuration
+│   └── 📄 railway.toml             # Railway config file
+│
+├── 📁 config/                       # Application configuration
+│   ├── 📄 __init__.py
+│   ├── 📁 prompts/                  # Agent prompts
+│   │   └── 📁 modular/              # Modular prompt system
+│   │       ├── 📄 README.md         # Prompt system documentation
+│   │       ├── 📄 base_prompt.md    # Base prompt template
+│   │       ├── 📄 provide_greeting.md
+│   │       ├── 📄 ask_clarifying_questions.md
+│   │       ├── 📄 create_confirmation_plan.md
+│   │       ├── 📄 generate_strawman.md
+│   │       └── 📄 refine_strawman.md
+│   └── 📄 settings.py              # Application settings
+│
+├── 📁 docs/                         # Documentation
+│   ├── 📁 PRPs/                     # Product Requirement Prompts
+│   │   ├── 📄 phase1-websocket-director-api.md
+│   │   └── 📁 templates/
+│   │       └── 📄 prp_base.md
+│   ├── 📁 architecture/             # Architecture documentation
+│   │   └── 📄 phase1-architecture.md
+│   ├── 📁 archive/                  # Archived/historical docs
+│   │   ├── 📁 context_memory/      # Memory management research
+│   │   └── (various archived docs)
+│   ├── 📁 clean_documents/          # Clean, current documentation
+│   │   ├── 📄 Context_and_Memory_Management.md
+│   │   ├── 📄 Frontend_Integration_Guide.md
+│   │   ├── 📄 Modular_Prompt_Architecture.md
+│   │   ├── 📄 WebSocket_Communication_Protocol.md
+│   │   └── (other clean docs)
+│   ├── 📁 learnings/               # Learning documentation
+│   │   └── 📄 Environment_Phase_1_Configure.md
+│   ├── 📁 plan/                    # Planning documents
+│   │   ├── 📄 PRD_Phase1.md       # Phase 1 requirements
+│   │   ├── 📄 PRD_Phase2.md       # Phase 2 requirements
+│   │   ├── 📄 PRD_Phase3.md       # Phase 3 requirements
+│   │   ├── 📄 PRD_Phase4.md       # Phase 4 requirements
+│   │   ├── 📄 folder_structure.md  # This document
+│   │   └── 📄 tech_stack.md       # Technology stack
+│   └── 📄 example-product-concept.md
+│
+├── 📁 examples/                     # Example files
+│   └── 📄 .gitkeep
+│
+├── 📁 migrations/                   # Database migrations
+│   ├── 📄 add_user_id_simple.sql
+│   └── 📄 add_user_id_to_sessions.sql
+│
+├── 📁 scripts/                      # Utility scripts
+│   ├── 📄 setup_database.sql      # Database setup SQL
+│   └── 📄 setup_db.py            # Database setup script
+│
+├── 📁 src/                         # Source code
+│   ├── 📄 __init__.py
+│   ├── 📁 agents/                  # AI agents
 │   │   ├── 📄 __init__.py
-│   │   ├── 📄 base.py         # Base agent class
-│   │   ├── 📄 director_in.py  # Director (Inbound)
-│   │   ├── 📄 director_out.py # Director (Outbound)
-│   │   ├── 📄 ux_architect.py # Layout specialist
-│   │   ├── 📄 researcher.py   # Content researcher
-│   │   ├── 📄 visual_designer.py # Image creator
-│   │   ├── 📄 data_analyst.py # Chart creator
-│   │   └── 📄 ux_analyst.py   # Diagram creator
+│   │   ├── 📄 base.py             # Base agent class
+│   │   ├── 📄 director.py         # Director agent (main)
+│   │   └── 📄 intent_router.py    # Intent classification
 │   │
-│   ├── 📁 api/                # API endpoints
+│   ├── 📁 handlers/                # Request handlers
 │   │   ├── 📄 __init__.py
-│   │   ├── 📄 websocket.py    # WebSocket handlers
-│   │   ├── 📄 routes.py       # REST endpoints
-│   │   └── 📄 middleware.py   # Auth & security
+│   │   └── 📄 websocket.py        # WebSocket handler
 │   │
-│   ├── 📁 models/             # Data models
+│   ├── 📁 models/                  # Data models
 │   │   ├── 📄 __init__.py
-│   │   ├── 📄 messages.py     # Communication models
-│   │   ├── 📄 presentation.py # Presentation structure
-│   │   └── 📄 agents.py       # Agent-specific models
+│   │   ├── 📄 agents.py           # Agent-specific models
+│   │   ├── 📄 session.py          # Session management
+│   │   └── 📄 websocket_messages.py # WebSocket protocol
 │   │
-│   ├── 📁 workflows/          # LangGraph workflows
+│   ├── 📁 storage/                 # Database & storage
 │   │   ├── 📄 __init__.py
-│   │   ├── 📄 main.py         # Main generation flow
-│   │   └── 📄 iteration.py    # Feedback flow
+│   │   └── 📄 supabase.py         # Supabase integration
 │   │
-│   ├── 📁 storage/            # Database & storage
+│   ├── 📁 utils/                   # Utilities
 │   │   ├── 📄 __init__.py
-│   │   ├── 📄 supabase.py     # Database operations
-│   │   └── 📄 redis_cache.py  # Caching layer
+│   │   ├── 📄 ab_testing.py       # A/B testing utilities
+│   │   ├── 📄 asset_formatter.py  # Asset formatting
+│   │   ├── 📄 auth.py             # Authentication
+│   │   ├── 📄 compat.py           # Compatibility layer
+│   │   ├── 📄 context_builder.py  # Context management
+│   │   ├── 📄 logfire_config.py   # Logfire setup
+│   │   ├── 📄 logger.py           # Logging setup
+│   │   ├── 📄 message_adapter.py  # Message adaptation
+│   │   ├── 📄 message_packager.py # Legacy packager
+│   │   ├── 📄 prompt_manager.py   # Prompt management
+│   │   ├── 📄 session_manager.py  # Session handling
+│   │   ├── 📄 streamlined_packager.py # Streamlined protocol
+│   │   ├── 📄 token_tracker.py    # Token usage tracking
+│   │   └── 📄 validators.py       # Input validation
 │   │
-│   └── 📁 utils/              # Utilities
+│   └── 📁 workflows/               # Workflow definitions
 │       ├── 📄 __init__.py
-│       ├── 📄 auth.py         # JWT authentication
-│       ├── 📄 validators.py   # Input validation
-│       └── 📄 logger.py       # Logging setup
+│       └── 📄 state_machine.py    # State management
 │
-├── 📁 tests/                   # All tests
-│   ├── 📁 unit/              # Unit tests
-│   ├── 📁 integration/       # Integration tests
-│   └── 📄 conftest.py        # Test configuration
+├── 📁 test/                        # Test files
+│   ├── 📄 README.md               # Test documentation
+│   ├── 📄 test_director_e2e.py    # End-to-end tests
+│   ├── 📄 test_modular_prompts.py # Prompt tests
+│   ├── 📄 test_scenarios.json     # Test scenarios
+│   ├── 📄 test_token_tracking.py  # Token tracking tests
+│   └── 📄 test_utils.py           # Test utilities
 │
-├── 📁 config/                  # Configuration
-│   ├── 📄 settings.py        # App settings
-│   └── 📁 prompts/           # Agent prompts
-│       ├── 📄 director.txt
-│       ├── 📄 researcher.txt
-│       └── 📄 designer.txt
-│
-├── 📁 scripts/                 # Utility scripts
-│   ├── 📄 setup_db.py        # Database setup
-│   └── 📄 generate_keys.py   # Key generation
-│
-├── 📄 .env.example            # Environment template
-├── 📄 requirements.txt        # Python dependencies
-├── 📄 docker-compose.yml      # Docker setup
-├── 📄 Dockerfile              # Container definition
-└── 📄 .gitignore             # Git ignore rules
+├── 📄 .env.example                 # Environment template
+├── 📄 .gitignore                   # Git ignore rules
+├── 📄 check_supabase_schema.py     # Schema verification
+├── 📄 debug_modular_prompts.py     # Prompt debugging
+├── 📄 main.py                      # Application entry point
+├── 📄 Procfile                     # Heroku/deployment
+├── 📄 railway.json                 # Railway configuration
+├── 📄 README.md                    # Project README
+├── 📄 requirements.txt             # Python dependencies
+├── 📄 setup_env.py                 # Environment setup
+├── 📄 start.sh                     # Startup script
+└── 📄 test_supabase_connection.py  # Connection testing
 ```
 
 ## Key Principles
@@ -98,39 +142,40 @@ deckster.xyz-ver-4/
 - Easy to navigate and find files
 
 ### 2. Clear Naming
-- **Descriptive names**: `director_in.py` not `di.py`
+- **Descriptive names**: `intent_router.py` not `ir.py`
 - **Consistent style**: Use underscores for Python files
-- **No abbreviations**: `presentation.py` not `pres.py`
+- **No abbreviations**: `websocket_messages.py` not `ws_msgs.py`
 
 ### 3. Logical Grouping
-- **By function**: All agents together, all API code together
+- **By function**: All agents together, all handlers together
 - **Not by phase**: Don't create phase1/, phase2/ folders
 - **Keep related files close**: Models near the code that uses them
 
 ### 4. Documentation First
 - All docs in one place (`docs/`)
 - README at the root explains everything
-- Each folder can have its own README if needed
+- Organized subdirectories for different doc types
 
 ## Quick Start Files
 
 ### Root README.md
 ```markdown
-# Presentation Generator
+# Deckster - AI Presentation Generator
 
-AI-powered presentation generation system.
+AI-powered presentation generation system with WebSocket API.
 
 ## Quick Start
 1. Clone the repo
 2. Copy `.env.example` to `.env`
-3. Run `docker-compose up`
-4. Open http://localhost:8000
+3. Run `pip install -r requirements.txt`
+4. Run `python main.py`
+5. Connect via WebSocket to ws://localhost:8000/ws
 
 ## Documentation
-- [Phase 1 Requirements](docs/PRD_Phase1.md)
-- [Communication Protocol](docs/comms_protocol.md)
-- [Technology Stack](docs/tech_stack.md)
-- [Security](docs/security.md)
+- [Architecture](docs/architecture/phase1-architecture.md)
+- [Phase 1 Requirements](docs/plan/PRD_Phase1.md)
+- [WebSocket Protocol](docs/clean_documents/WebSocket_Communication_Protocol.md)
+- [Technology Stack](docs/plan/tech_stack.md)
 
 ## Development
 See [docs/](docs/) for detailed documentation.
@@ -138,19 +183,21 @@ See [docs/](docs/) for detailed documentation.
 
 ### .env.example
 ```bash
-# Core
-JWT_SECRET_KEY=generate-random-key-here
-SUPABASE_URL=your-project-url
+# Core Database
+SUPABASE_URL=your-supabase-url
 SUPABASE_ANON_KEY=your-anon-key
 
-# AI Services
-OPENAI_API_KEY=your-key
+# AI Services (at least one required)
+GOOGLE_API_KEY=your-gemini-key
+OPENAI_API_KEY=your-openai-key
+ANTHROPIC_API_KEY=your-anthropic-key
 
-# Redis
-REDIS_URL=redis://localhost:6379
+# Observability (optional)
+LOGFIRE_TOKEN=your-logfire-token
 
 # Environment
-NODE_ENV=development
+PORT=8000
+DEBUG=false
 ```
 
 ## Development Workflow
@@ -158,88 +205,108 @@ NODE_ENV=development
 ### 1. Starting a New Feature
 ```bash
 # 1. Create feature branch
-git checkout -b feature/agent-name
+git checkout -b feature/feature-name
 
-# 2. Add agent file
-touch src/agents/new_agent.py
+# 2. Add/modify relevant files
+# For agents: src/agents/
+# For handlers: src/handlers/
+# For models: src/models/
 
 # 3. Add tests
-touch tests/unit/test_new_agent.py
+touch test/test_feature.py
 
-# 4. Update models if needed
-# edit src/models/agents.py
+# 4. Update documentation
+# Update relevant docs in docs/
 ```
 
 ### 2. Running the Project
 ```bash
 # Development
-python -m uvicorn src.api.websocket:app --reload
+python main.py
+
+# With environment variables
+python setup_env.py
+python main.py
 
 # Tests
-pytest tests/
+pytest test/
 
-# Docker
-docker-compose up
+# Specific test
+pytest test/test_director_e2e.py -v
 ```
 
 ## File Size Guidelines
 
 - **Keep files under 700 lines**
-- If a file grows too large, split by functionality:
-  ```
-  # Instead of one large director.py:
-  agents/
-  ├── director/
-  │   ├── __init__.py      # Main Director class
-  │   ├── clarifications.py # Question logic
-  │   ├── structure.py     # Structure building
-  │   └── utils.py         # Helper functions
-  ```
+- If a file grows too large, split by functionality
+- Use clear module boundaries
 
 ## What Goes Where?
 
 | What | Where | Example |
 |------|-------|---------|
-| New agent | `src/agents/` | `src/agents/translator.py` |
-| API endpoint | `src/api/routes.py` | Add new route function |
-| Data model | `src/models/` | `src/models/messages.py` |
-| Database query | `src/storage/` | `src/storage/supabase.py` |
-| Shared utility | `src/utils/` | `src/utils/validators.py` |
-| Configuration | `config/` | `config/settings.py` |
-| Documentation | `docs/` | `docs/new_feature.md` |
-| Tests | `tests/` | `tests/unit/test_feature.py` |
+| New agent | `src/agents/` | `src/agents/researcher.py` |
+| WebSocket handler | `src/handlers/` | Update `websocket.py` |
+| Data model | `src/models/` | `src/models/presentation.py` |
+| Database query | `src/storage/` | Update `supabase.py` |
+| Shared utility | `src/utils/` | `src/utils/formatter.py` |
+| Configuration | `config/` | Update `settings.py` |
+| Documentation | `docs/` | `docs/feature.md` |
+| Tests | `test/` | `test/test_feature.py` |
+| Prompts | `config/prompts/modular/` | `new_state.md` |
 
 ## Common Operations
 
 ### Adding a New Agent
 1. Create agent file: `src/agents/my_agent.py`
 2. Define agent class inheriting from `BaseAgent`
-3. Add agent to workflow: `src/workflows/main.py`
-4. Create tests: `tests/unit/test_my_agent.py`
+3. Add to director workflow if needed
+4. Create tests: `test/test_my_agent.py`
 
-### Adding an API Endpoint
-1. Add route to: `src/api/routes.py`
-2. Add request/response models: `src/models/messages.py`
-3. Add validation: `src/utils/validators.py`
-4. Add tests: `tests/integration/test_api.py`
+### Adding a New State
+1. Add state to workflow: `src/workflows/state_machine.py`
+2. Create prompt: `config/prompts/modular/new_state.md`
+3. Update director: `src/agents/director.py`
+4. Update intent router: `src/agents/intent_router.py`
+5. Add tests
 
-### Modifying Communication Protocol
-1. Update models: `src/models/messages.py`
-2. Update docs: `docs/comms_protocol.md`
-3. Update affected agents
-4. Run all tests
+### Modifying WebSocket Protocol
+1. Update models: `src/models/websocket_messages.py`
+2. Update packager: `src/utils/streamlined_packager.py`
+3. Update handler: `src/handlers/websocket.py`
+4. Update docs: `docs/clean_documents/WebSocket_Communication_Protocol.md`
+5. Run all tests
+
+## Current Implementation Status
+
+### ✅ Implemented (Phase 1)
+- WebSocket API with intent-based routing
+- Director agent with modular prompts
+- Session management with Supabase
+- Streamlined WebSocket protocol
+- State machine workflow
+- A/B testing framework
+- Token usage tracking
+
+### 🚧 Not Yet Implemented
+- Specialist agents (researcher, designer, etc.)
+- Redis caching layer
+- Docker containerization
+- Multiple workflow types
+- Vector search capabilities
+- Real-time collaboration
 
 ## Benefits of This Structure
 
-✅ **Easy to Navigate** - Know exactly where to find things  
-✅ **Easy to Scale** - Add new agents/features without restructuring  
-✅ **Easy to Test** - Clear separation of concerns  
-✅ **Easy to Deploy** - Docker-friendly structure  
-✅ **Easy to Understand** - New developers can jump in quickly  
+✅ **Easy to Navigate** - Clear organization by function  
+✅ **Easy to Scale** - Add new features without restructuring  
+✅ **Easy to Test** - Flat test structure, clear boundaries  
+✅ **Easy to Deploy** - Railway/Heroku ready  
+✅ **Easy to Understand** - Logical grouping and naming  
 
 ## Remember
 
-- **Don't overthink it** - Simple is better
-- **Be consistent** - Follow the patterns
-- **Document changes** - Update README when adding major features
-- **Keep it clean** - Delete unused files
+- **Follow the patterns** - Consistency is key
+- **Document changes** - Update relevant docs
+- **Write tests** - Every feature needs tests
+- **Keep it clean** - Remove unused code

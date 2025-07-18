@@ -1046,10 +1046,10 @@ presentation-generator/
 ### 4. Environment Variables
 ```bash
 # .env.example
-# Database
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_ANON_KEY=xxx
-REDIS_URL=redis://localhost:6379
+# Database (REQUIRED)
+SUPABASE_URL=https://xxx.supabase.co  # Required - Get from Supabase project settings
+SUPABASE_ANON_KEY=xxx                 # Required - Get from Supabase project API settings
+REDIS_URL=redis://localhost:6379      # Optional - For caching (defaults to in-memory if not provided)
 
 # AI Models
 OPENAI_API_KEY=xxx

@@ -32,20 +32,6 @@ class Settings(BaseSettings):
     # Logging
     LOGFIRE_TOKEN: Optional[str] = Field(None, env="LOGFIRE_TOKEN")
     
-    # Modular Prompt System
-    USE_MODULAR_PROMPTS: bool = Field(
-        default=True,
-        description="Enable modular prompt system"
-    )
-    
-    # A/B Testing
-    MODULAR_PROMPT_PERCENTAGE: int = Field(
-        default=100,
-        ge=0,
-        le=100,
-        description="Percentage of sessions to use modular prompts (0-100)"
-    )
-    
     # Streamlined WebSocket Protocol
     USE_STREAMLINED_PROTOCOL: bool = Field(
         default=True,
